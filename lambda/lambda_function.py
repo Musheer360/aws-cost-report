@@ -375,6 +375,35 @@ def create_regional_sheet(ws, regional_costs, months, month_names):
     for col in range(2, len(months) + 3):
         ws.column_dimensions[chr(64 + col)].width = 15
 
+def format_compute_usage(usage_type, cost, usage):
+    """Format compute instance usage with hourly rates"""
+    # Patterns for hourly compute resources
+    compute_patterns = [
+        ('BoxUsage:', 'EC2'),
+        ('HeavyUsage:', 'EC2 Reserved'),
+        ('SpotUsage:', 'EC2 Spot'),
+        ('InstanceUsage:', 'RDS'),
+        ('Multi-AZUsage:', 'RDS Multi-AZ'),
+        ('ServerlessUsage:', 'RDS Serverless'),
+        ('NodeUsage:', 'ElastiCache'),
+        ('Node:', 'Redshift'),
+    ]
+    
+    for pattern, service_type in compute_patterns:
+        if pattern in usage_type:
+            # Extract instance type
+            instance_type = usage_type.split(pattern)[1].split(':')[0]
+            
+            # Calculate hourly rate
+            if usage > 0:
+                hourly_rate = cost / usage
+                return f"{instance_type} ({usage:,.3f} Hrs @ ${hourly_rate:.4f}): ${cost:,.2f}"
+            else:
+                return f"{instance_type}: ${cost:,.2f}"
+    
+    # Not a compute instance, return standard format
+    return None
+
 def generate_detailed_comparison(month_names, data, months):
     lines = []
     
@@ -382,15 +411,20 @@ def generate_detailed_comparison(month_names, data, months):
         month_data = data.get(month, {})
         
         if 'details' in month_data:
-            # Use brackets and uppercase
             lines.append(f"\n[{month_names[i].upper()} BREAKDOWN]")
             
             sorted_details = sorted(month_data['details'], key=lambda x: x['cost'], reverse=True)[:5]
             for detail in sorted_details:
-                usage_str = f"{detail['usage']:,.3f}" if detail['usage'] > 0 else "N/A"
-                lines.append(f"{detail['usage_type']}: USD {detail['cost']:,.2f}")
-                if detail['usage'] > 0:
-                    lines.append(f"Usage: {usage_str} units")
+                # Try to format as compute instance
+                formatted = format_compute_usage(detail['usage_type'], detail['cost'], detail['usage'])
+                
+                if formatted:
+                    lines.append(formatted)
+                else:
+                    # Standard format for non-compute resources
+                    lines.append(f"{detail['usage_type']}: USD {detail['cost']:,.2f}")
+                    if detail['usage'] > 0:
+                        lines.append(f"Usage: {detail['usage']:,.3f} units")
     
     if len(months) >= 2:
         first_total = data.get(months[0], {}).get('total', 0)
