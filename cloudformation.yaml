@@ -1,0 +1,133 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: AWS Cost Comparison Report Generator
+
+Parameters:
+  TargetAccountId:
+    Type: String
+    Description: AWS Account ID to analyze costs for (optional, leave empty for same account)
+    Default: ''
+
+Resources:
+  FrontendBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub 'cost-report-frontend-${AWS::AccountId}'
+      WebsiteConfiguration:
+        IndexDocument: index.html
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: false
+        BlockPublicPolicy: false
+        IgnorePublicAcls: false
+        RestrictPublicBuckets: false
+
+  FrontendBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref FrontendBucket
+      PolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal: '*'
+            Action: 's3:GetObject'
+            Resource: !Sub '${FrontendBucket.Arn}/*'
+
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: CostExplorerAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'ce:GetCostAndUsage'
+                  - 'ce:GetCostForecast'
+                Resource: '*'
+        - PolicyName: AssumeTargetRole
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: 'sts:AssumeRole'
+                Resource: !Sub 'arn:aws:iam::*:role/CostReportReadOnlyRole'
+
+  CostReportFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: CostReportGenerator
+      Runtime: python3.11
+      Handler: lambda_function.lambda_handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: 300
+      MemorySize: 512
+      Code:
+        ZipFile: |
+          # Placeholder - deploy actual code separately
+          def lambda_handler(event, context):
+              return {'statusCode': 200, 'body': 'Deploy actual code'}
+
+  ApiGateway:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: CostReportAPI
+      ProtocolType: HTTP
+      CorsConfiguration:
+        AllowOrigins:
+          - '*'
+        AllowMethods:
+          - POST
+        AllowHeaders:
+          - '*'
+
+  ApiIntegration:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref ApiGateway
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !GetAtt CostReportFunction.Arn
+      PayloadFormatVersion: '2.0'
+
+  ApiRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref ApiGateway
+      RouteKey: 'POST /generate'
+      Target: !Sub 'integrations/${ApiIntegration}'
+
+  ApiStage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      ApiId: !Ref ApiGateway
+      StageName: prod
+      AutoDeploy: true
+
+  LambdaInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref CostReportFunction
+      Action: lambda:InvokeFunction
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ApiGateway}/*'
+
+Outputs:
+  FrontendURL:
+    Value: !GetAtt FrontendBucket.WebsiteURL
+    Description: Frontend website URL
+  
+  ApiEndpoint:
+    Value: !Sub 'https://${ApiGateway}.execute-api.${AWS::Region}.amazonaws.com/prod/generate'
+    Description: API Gateway endpoint (update in frontend)
+  
+  LambdaFunctionName:
+    Value: !Ref CostReportFunction
+    Description: Lambda function name for code deployment

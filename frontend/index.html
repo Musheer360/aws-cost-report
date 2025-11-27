@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AWS Cost Comparison Report Generator</title>
+    <link href="https://fonts.googleapis.com/css2?family=Amazon+Ember:wght@400;700&family=Open+Sans:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Open Sans', 'Amazon Ember', Arial, sans-serif;
+            background: linear-gradient(135deg, #232F3E 0%, #131A22 100%);
+            color: #FFFFFF;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            text-align: center;
+            padding: 40px 0;
+            border-bottom: 3px solid #FF9900;
+            margin-bottom: 40px;
+        }
+        
+        .header h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            color: #FFFFFF;
+            margin-bottom: 10px;
+        }
+        
+        .header p {
+            color: #AAB7B8;
+            font-size: 1.1rem;
+        }
+        
+        .aws-logo {
+            color: #FF9900;
+            font-weight: bold;
+        }
+        
+        .card {
+            background: #FFFFFF;
+            border-radius: 8px;
+            padding: 30px;
+            margin-bottom: 25px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+            color: #232F3E;
+        }
+        
+        .card h3 {
+            color: #232F3E;
+            font-size: 1.3rem;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #FF9900;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #232F3E;
+        }
+        
+        input, select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #D5DBDB;
+            border-radius: 4px;
+            font-size: 1rem;
+            transition: border-color 0.3s;
+            background: #FFFFFF;
+            color: #232F3E;
+        }
+        
+        input:focus, select:focus {
+            outline: none;
+            border-color: #FF9900;
+        }
+        
+        .month-selector {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 15px;
+            align-items: center;
+        }
+        
+        .month-selector select {
+            flex: 1;
+        }
+        
+        .month-selector .remove-btn {
+            background: #D13212;
+            color: white;
+            border: none;
+            padding: 12px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 1rem;
+            transition: background 0.3s;
+        }
+        
+        .month-selector .remove-btn:hover {
+            background: #A02A0F;
+        }
+        
+        .btn {
+            background: #FF9900;
+            color: #232F3E;
+            border: none;
+            padding: 14px 28px;
+            border-radius: 4px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-right: 10px;
+        }
+        
+        .btn:hover {
+            background: #EC7211;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(255, 153, 0, 0.3);
+        }
+        
+        .btn-secondary {
+            background: #232F3E;
+            color: #FFFFFF;
+        }
+        
+        .btn-secondary:hover {
+            background: #131A22;
+        }
+        
+        .btn-generate {
+            width: 100%;
+            padding: 18px;
+            font-size: 1.2rem;
+            background: linear-gradient(135deg, #FF9900 0%, #EC7211 100%);
+        }
+        
+        .status {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 4px;
+            text-align: center;
+            font-weight: 600;
+        }
+        
+        .status.success {
+            background: #D5F4E6;
+            color: #0F5132;
+            border: 2px solid #0F5132;
+        }
+        
+        .status.error {
+            background: #F8D7DA;
+            color: #842029;
+            border: 2px solid #842029;
+        }
+        
+        .status.loading {
+            background: #FFF3CD;
+            color: #664D03;
+            border: 2px solid #664D03;
+        }
+        
+        .info-box {
+            background: #E8F4F8;
+            border-left: 4px solid #0073BB;
+            padding: 15px;
+            margin-top: 20px;
+            border-radius: 4px;
+            color: #232F3E;
+        }
+        
+        .info-box strong {
+            color: #0073BB;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1><span class="aws-logo">AWS</span> Cost Comparison Report</h1>
+            <p>Generate detailed cost analysis reports with regional breakdowns</p>
+        </div>
+        
+        <div class="card">
+            <h3>Client Information</h3>
+            <div class="form-group">
+                <label>Client Name</label>
+                <input type="text" id="clientName" placeholder="Example Client" required>
+            </div>
+        </div>
+        
+        <div class="card">
+            <h3>Select Months (2-6 months)</h3>
+            <div id="months-container"></div>
+            <button class="btn" onclick="addMonth()">+ Add Month</button>
+        </div>
+        
+        <div class="card">
+            <h3>AWS Credentials</h3>
+            <div class="form-group">
+                <label>AWS Access Key ID</label>
+                <input type="text" id="accessKeyId" placeholder="AKIAIOSFODNN7EXAMPLE" required>
+            </div>
+            
+            <div class="form-group">
+                <label>AWS Secret Access Key</label>
+                <input type="password" id="secretAccessKey" placeholder="wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY" required>
+            </div>
+            
+            <div class="info-box">
+                <strong>Note:</strong> Your credentials are used only to fetch cost data and are never stored.
+            </div>
+        </div>
+        
+        <div class="card">
+            <button class="btn btn-generate" onclick="generateReport()">Generate Report</button>
+            <div id="status"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_ENDPOINT = 'https://j2y2zt3ak6.execute-api.ap-south-1.amazonaws.com/prod/generate';
+        
+        const months = ['January', 'February', 'March', 'April', 'May', 'June', 
+                       'July', 'August', 'September', 'October', 'November', 'December'];
+        
+        function createMonthSelector() {
+            const div = document.createElement('div');
+            div.className = 'month-selector';
+            
+            const yearSelect = document.createElement('select');
+            yearSelect.className = 'year-select';
+            const currentYear = new Date().getFullYear();
+            for (let year = currentYear; year >= currentYear - 3; year--) {
+                const option = document.createElement('option');
+                option.value = year;
+                option.textContent = year;
+                yearSelect.appendChild(option);
+            }
+            
+            const monthSelect = document.createElement('select');
+            monthSelect.className = 'month-select';
+            months.forEach((month, index) => {
+                const option = document.createElement('option');
+                option.value = String(index + 1).padStart(2, '0');
+                option.textContent = month;
+                monthSelect.appendChild(option);
+            });
+            
+            const removeBtn = document.createElement('button');
+            removeBtn.className = 'remove-btn';
+            removeBtn.textContent = '✕';
+            removeBtn.onclick = function() {
+                if (document.querySelectorAll('.month-selector').length > 2) {
+                    div.remove();
+                } else {
+                    alert('Minimum 2 months required');
+                }
+            };
+            
+            div.appendChild(yearSelect);
+            div.appendChild(monthSelect);
+            div.appendChild(removeBtn);
+            
+            return div;
+        }
+        
+        function addMonth() {
+            const container = document.getElementById('months-container');
+            if (container.children.length >= 6) {
+                alert('Maximum 6 months allowed');
+                return;
+            }
+            container.appendChild(createMonthSelector());
+        }
+        
+        function getSelectedMonths() {
+            const selectors = document.querySelectorAll('.month-selector');
+            const months = [];
+            selectors.forEach(selector => {
+                const year = selector.querySelector('.year-select').value;
+                const month = selector.querySelector('.month-select').value;
+                months.push(`${year}-${month}`);
+            });
+            return months;
+        }
+        
+        async function generateReport() {
+            const status = document.getElementById('status');
+            status.className = 'status loading';
+            status.textContent = 'Generating report... This may take a minute.';
+            
+            const clientName = document.getElementById('clientName').value.trim();
+            const months = getSelectedMonths();
+            
+            if (!clientName) {
+                status.className = 'status error';
+                status.textContent = 'Please provide client name';
+                return;
+            }
+            
+            if (months.length < 2 || months.length > 6) {
+                status.className = 'status error';
+                status.textContent = 'Please select 2-6 months';
+                return;
+            }
+            
+            const accessKeyId = document.getElementById('accessKeyId').value;
+            const secretAccessKey = document.getElementById('secretAccessKey').value;
+            
+            if (!accessKeyId || !secretAccessKey) {
+                status.className = 'status error';
+                status.textContent = 'Please provide AWS credentials';
+                return;
+            }
+            
+            const payload = {
+                months,
+                accessKeyId,
+                secretAccessKey,
+                region: 'us-east-1',
+                clientName
+            };
+            
+            try {
+                const response = await fetch(API_ENDPOINT, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    const blob = base64ToBlob(data.file, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = data.filename;
+                    a.click();
+                    status.className = 'status success';
+                    status.textContent = 'Report generated successfully!';
+                } else {
+                    status.className = 'status error';
+                    status.textContent = `Error: ${data.message || 'Unknown error'}`;
+                }
+            } catch (error) {
+                status.className = 'status error';
+                status.textContent = `Error: ${error.message}`;
+            }
+        }
+        
+        function base64ToBlob(base64, type) {
+            const binary = atob(base64);
+            const array = new Uint8Array(binary.length);
+            for (let i = 0; i < binary.length; i++) {
+                array[i] = binary.charCodeAt(i);
+            }
+            return new Blob([array], { type });
+        }
+        
+        // Initialize with 2 month selectors
+        document.addEventListener('DOMContentLoaded', () => {
+            addMonth();
+            addMonth();
+        });
+    </script>
+</body>
+</html>

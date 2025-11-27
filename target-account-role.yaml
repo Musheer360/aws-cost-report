@@ -1,0 +1,37 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Read-only role for cost report generation (deploy in target account)
+
+Parameters:
+  TrustedAccountId:
+    Type: String
+    Description: AWS Account ID that will assume this role (Lambda account)
+
+Resources:
+  CostReportReadOnlyRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: CostReportReadOnlyRole
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:aws:iam::${TrustedAccountId}:role/CostReportLambdaRole'
+            Action: 'sts:AssumeRole'
+      Policies:
+        - PolicyName: CostExplorerReadOnly
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'ce:GetCostAndUsage'
+                  - 'ce:GetCostForecast'
+                  - 'ce:DescribeCostCategoryDefinition'
+                  - 'ce:ListCostCategoryDefinitions'
+                Resource: '*'
+
+Outputs:
+  RoleArn:
+    Value: !GetAtt CostReportReadOnlyRole.Arn
+    Description: ARN of the read-only role
