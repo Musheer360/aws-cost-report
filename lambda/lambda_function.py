@@ -11,12 +11,28 @@ def lambda_handler(event, context):
     months = body['months']  # Format: ['2025-09', '2025-10']
     client_name = body.get('clientName', 'Client')
     
-    # Only credentials auth
-    session = boto3.Session(
-        aws_access_key_id=body['accessKeyId'],
-        aws_secret_access_key=body['secretAccessKey'],
-        region_name=body.get('region', 'us-east-1')
-    )
+    # Support both auth methods
+    if 'targetAccountId' in body:
+        # Role-based auth
+        sts = boto3.client('sts')
+        role_arn = f"arn:aws:iam::{body['targetAccountId']}:role/CostReports360ReadOnlyRole"
+        assumed_role = sts.assume_role(
+            RoleArn=role_arn,
+            RoleSessionName='CostReports360Session'
+        )
+        session = boto3.Session(
+            aws_access_key_id=assumed_role['Credentials']['AccessKeyId'],
+            aws_secret_access_key=assumed_role['Credentials']['SecretAccessKey'],
+            aws_session_token=assumed_role['Credentials']['SessionToken'],
+            region_name='us-east-1'
+        )
+    else:
+        # Credentials auth
+        session = boto3.Session(
+            aws_access_key_id=body['accessKeyId'],
+            aws_secret_access_key=body['secretAccessKey'],
+            region_name=body.get('region', 'us-east-1')
+        )
     
     ce = session.client('ce')
     

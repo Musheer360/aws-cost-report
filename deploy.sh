@@ -49,9 +49,11 @@ aws lambda update-function-code \
     --zip-file fileb://lambda.zip \
     --region $REGION
 
-# Step 4: Update frontend with API endpoint
-echo "Updating frontend with API endpoint..."
+# Step 4: Update frontend with API endpoint and Account ID
+echo "Updating frontend with API endpoint and Account ID..."
+ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 sed -i "s|PLACEHOLDER_API_ENDPOINT|$API_ENDPOINT|g" frontend/index.html
+sed -i "s|ACCOUNT_ID_PLACEHOLDER|$ACCOUNT_ID|g" frontend/index.html
 
 # Step 5: Upload frontend to S3
 echo "Uploading frontend to S3..."
@@ -64,5 +66,6 @@ echo ""
 echo "=== Deployment Complete ==="
 echo "Frontend URL: http://$BUCKET_NAME.s3-website-$REGION.amazonaws.com"
 echo "API Endpoint: $API_ENDPOINT"
+echo "Your Account ID: $ACCOUNT_ID"
 echo ""
-echo "To create a read-only role in target accounts, deploy target-account-role.yaml"
+echo "For cross-account access, clients can download the CloudFormation template from the frontend."

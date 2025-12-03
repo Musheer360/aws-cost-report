@@ -230,21 +230,47 @@
         </div>
         
         <div class="card">
-            <h3>AWS Credentials</h3>
+            <h3>Authentication Method</h3>
             <div class="form-group">
-                <label>AWS Access Key ID</label>
-                <input type="text" id="accessKeyId" placeholder="AKIAIOSFODNN7EXAMPLE" required>
+                <label>Choose Method</label>
+                <select id="authMethod" onchange="toggleAuthMethod()">
+                    <option value="credentials">AWS Credentials</option>
+                    <option value="role">Cross-Account Role (Recommended)</option>
+                </select>
             </div>
-            
-            <div class="form-group">
-                <label>AWS Secret Access Key</label>
-                <input type="password" id="secretAccessKey" placeholder="wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY" required>
+
+            <div id="credentialsAuth">
+                <div class="form-group">
+                    <label>AWS Access Key ID</label>
+                    <input type="text" id="accessKeyId" placeholder="AKIAIOSFODNN7EXAMPLE">
+                </div>
+                
+                <div class="form-group">
+                    <label>AWS Secret Access Key</label>
+                    <input type="password" id="secretAccessKey" placeholder="wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY">
+                </div>
             </div>
-            
-            <div class="info-box">
-                <strong>Note:</strong> Your credentials are used only to fetch cost data and are never stored.
+
+            <div id="roleAuth" style="display:none;">
+                <div class="info-box">
+                    <strong>Step 1:</strong> Download the CloudFormation template and deploy it in your AWS account to create the required role.
+                    <br><br>
+                    <button class="btn" onclick="downloadTemplate()">📥 Download CloudFormation Template</button>
+                </div>
+                <br>
+                <div class="form-group">
+                    <label>Your AWS Account ID (12 digits)</label>
+                    <input type="text" id="targetAccountId" placeholder="123456789012" pattern="[0-9]{12}" maxlength="12">
+                </div>
             </div>
         </div>
+        
+        <div class="card">
+            <h3>Select Months (2-6 months)</h3>
+            <div id="months-container"></div>
+            <button class="btn" onclick="addMonth()">+ Add Month</button>
+        </div>
+        
         
         <div class="card">
             <button class="btn btn-generate" onclick="generateReport()">Generate Report</button>
@@ -319,6 +345,67 @@
             return months;
         }
         
+        function toggleAuthMethod() {
+            const method = document.getElementById('authMethod').value;
+            const credentialsAuth = document.getElementById('credentialsAuth');
+            const roleAuth = document.getElementById('roleAuth');
+            
+            if (method === 'credentials') {
+                credentialsAuth.style.display = 'block';
+                roleAuth.style.display = 'none';
+            } else {
+                credentialsAuth.style.display = 'none';
+                roleAuth.style.display = 'block';
+            }
+        }
+        
+        function downloadTemplate() {
+            const template = `AWSTemplateFormatVersion: '2010-09-09'
+Description: CostReports360 Read-Only Role for Cross-Account Access
+
+Parameters:
+  TrustedAccountId:
+    Type: String
+    Description: Account ID where CostReports360 is deployed
+    Default: '162290422654'
+
+Resources:
+  CostReports360ReadOnlyRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: CostReports360ReadOnlyRole
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub 'arn:aws:iam::\${TrustedAccountId}:root'
+            Action: 'sts:AssumeRole'
+      Policies:
+        - PolicyName: CostExplorerReadOnly
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'ce:GetCostAndUsage'
+                  - 'ce:GetCostForecast'
+                Resource: '*'
+
+Outputs:
+  RoleArn:
+    Description: ARN of the created role
+    Value: !GetAtt CostReports360ReadOnlyRole.Arn`;
+            
+            const blob = new Blob([template], { type: 'text/yaml' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'costreports360-role.yaml';
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+        
         async function generateReport() {
             const status = document.getElementById('status');
             status.className = 'status loading';
@@ -339,28 +426,42 @@
                 return;
             }
             
-            const accessKeyId = document.getElementById('accessKeyId').value;
-            const secretAccessKey = document.getElementById('secretAccessKey').value;
-            
-            if (!accessKeyId || !secretAccessKey) {
-                status.className = 'status error';
-                status.textContent = 'Please provide AWS credentials';
-                return;
-            }
-            
-            const payload = {
-                months,
-                accessKeyId,
-                secretAccessKey,
-                region: 'us-east-1',
-                clientName
+            const authMethod = document.getElementById('authMethod').value;
+            let requestBody = {
+                clientName: clientName,
+                months: months
             };
             
+            if (authMethod === 'credentials') {
+                const accessKeyId = document.getElementById('accessKeyId').value;
+                const secretAccessKey = document.getElementById('secretAccessKey').value;
+                
+                if (!accessKeyId || !secretAccessKey) {
+                    status.className = 'status error';
+                    status.textContent = 'Please provide AWS credentials';
+                    return;
+                }
+                
+                requestBody.accessKeyId = accessKeyId;
+                requestBody.secretAccessKey = secretAccessKey;
+            } else {
+                const targetAccountId = document.getElementById('targetAccountId').value;
+                
+                if (!targetAccountId || !/^[0-9]{12}$/.test(targetAccountId)) {
+                    status.className = 'status error';
+                    status.textContent = 'Please provide valid 12-digit AWS Account ID';
+                    return;
+                }
+                
+                requestBody.targetAccountId = targetAccountId;
+            }
+            
+            try {
             try {
                 const response = await fetch(API_ENDPOINT, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(payload)
+                    body: JSON.stringify(requestBody)
                 });
                 
                 const data = await response.json();
