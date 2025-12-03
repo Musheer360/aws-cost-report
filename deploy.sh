@@ -48,7 +48,7 @@ aws lambda update-function-code \
     --function-name $LAMBDA_NAME \
     --zip-file fileb://lambda.zip \
     --region $REGION \
-    --no-cli-pager
+    --no-cli-pager > /dev/null
 
 # Step 4: Update frontend with API endpoint and Account ID
 echo "Updating frontend with API endpoint and Account ID..."
