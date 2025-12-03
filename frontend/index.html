@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AWS Cost Comparison Report Generator</title>
+    <title>CostReports360</title>
     <link href="https://fonts.googleapis.com/css2?family=Amazon+Ember:wght@400;700&family=Open+Sans:wght@400;600&display=swap" rel="stylesheet">
     <style>
         * {
@@ -14,7 +14,7 @@
         
         body {
             font-family: 'Open Sans', 'Amazon Ember', Arial, sans-serif;
-            background: linear-gradient(135deg, #232F3E 0%, #131A22 100%);
+            background: linear-gradient(135deg, #23649c 0%, #1a4d78 100%);
             color: #FFFFFF;
             min-height: 100vh;
             padding: 20px;
@@ -28,8 +28,13 @@
         .header {
             text-align: center;
             padding: 40px 0;
-            border-bottom: 3px solid #FF9900;
+            border-bottom: 3px solid #FFFFFF;
             margin-bottom: 40px;
+        }
+
+        .logo {
+            max-width: 200px;
+            margin-bottom: 20px;
         }
         
         .header h1 {
@@ -40,12 +45,12 @@
         }
         
         .header p {
-            color: #AAB7B8;
+            color: #FFFFFF;
             font-size: 1.1rem;
         }
         
         .aws-logo {
-            color: #FF9900;
+            color: #FFFFFF;
             font-weight: bold;
         }
         
@@ -55,15 +60,15 @@
             padding: 30px;
             margin-bottom: 25px;
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
-            color: #232F3E;
+            color: #23649c;
         }
         
         .card h3 {
-            color: #232F3E;
+            color: #23649c;
             font-size: 1.3rem;
             margin-bottom: 20px;
             padding-bottom: 10px;
-            border-bottom: 2px solid #FF9900;
+            border-bottom: 2px solid #23649c;
         }
         
         .form-group {
@@ -74,7 +79,7 @@
             display: block;
             margin-bottom: 8px;
             font-weight: 600;
-            color: #232F3E;
+            color: #23649c;
         }
         
         input, select {
@@ -90,7 +95,7 @@
         
         input:focus, select:focus {
             outline: none;
-            border-color: #FF9900;
+            border-color: #23649c;
         }
         
         .month-selector {
@@ -120,8 +125,8 @@
         }
         
         .btn {
-            background: #FF9900;
-            color: #232F3E;
+            background: #23649c;
+            color: #FFFFFF;
             border: none;
             padding: 14px 28px;
             border-radius: 4px;
@@ -133,25 +138,25 @@
         }
         
         .btn:hover {
-            background: #EC7211;
+            background: #1a4d78;
             transform: translateY(-2px);
-            box-shadow: 0 4px 8px rgba(255, 153, 0, 0.3);
+            box-shadow: 0 4px 8px rgba(35, 100, 156, 0.3);
         }
         
         .btn-secondary {
-            background: #232F3E;
-            color: #FFFFFF;
-        }
+            background: #FFFFFF;
+            color: #23649c;
+            border: 2px solid #23649c;
         
         .btn-secondary:hover {
-            background: #131A22;
+            background: #f0f0f0;
         }
         
         .btn-generate {
             width: 100%;
             padding: 18px;
             font-size: 1.2rem;
-            background: linear-gradient(135deg, #FF9900 0%, #EC7211 100%);
+            background: linear-gradient(135deg, #23649c 0%, #1a4d78 100%);
         }
         
         .status {
@@ -182,23 +187,24 @@
         
         .info-box {
             background: #E8F4F8;
-            border-left: 4px solid #0073BB;
+            border-left: 4px solid #23649c;
             padding: 15px;
             margin-top: 20px;
             border-radius: 4px;
-            color: #232F3E;
+            color: #23649c;
         }
         
         .info-box strong {
-            color: #0073BB;
+            color: #23649c;
         }
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <h1><span class="aws-logo">AWS</span> Cost Comparison Report</h1>
-            <p>Generate detailed cost analysis reports with regional breakdowns</p>
+            <img src="https://apn-portal.my.salesforce.com/servlet/servlet.ImageServer?id=0150L00000AUiBnQAL&oid=00DE0000000c48tMAA" alt="CloudThat Logo" class="logo">
+            <h1>CostReports360</h1>
+            <p>Generate detailed AWS cost analysis reports with regional breakdowns</p>
         </div>
         
         <div class="card">
@@ -239,7 +245,7 @@
     </div>
 
     <script>
-        const API_ENDPOINT = 'PLACEHOLDER_API_ENDPOINT';
+        const API_ENDPOINT = 'https://xnfak4yfx9.execute-api.ap-south-1.amazonaws.com/prod/generate';
         
         const months = ['January', 'February', 'March', 'April', 'May', 'June', 
                        'July', 'August', 'September', 'October', 'November', 'December'];

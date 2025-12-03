@@ -4,7 +4,7 @@ set -e
 echo "=== AWS Cost Report Generator Deployment ==="
 
 # Variables
-STACK_NAME="cost-report-generator"
+STACK_NAME="costreports360"
 REGION="${AWS_REGION:-ap-south-1}"
 
 # Step 1: Deploy CloudFormation stack

@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: AWS Cost Comparison Report Generator
+Description: CostReports360 - AWS Cost Comparison Report Generator
 
 Parameters:
   TargetAccountId:
@@ -63,7 +63,7 @@ Resources:
   CostReportFunction:
     Type: AWS::Lambda::Function
     Properties:
-      FunctionName: CostReportGenerator
+      FunctionName: CostReports360Generator
       Runtime: python3.11
       Handler: lambda_function.lambda_handler
       Role: !GetAtt LambdaExecutionRole.Arn
@@ -78,7 +78,7 @@ Resources:
   ApiGateway:
     Type: AWS::ApiGatewayV2::Api
     Properties:
-      Name: CostReportAPI
+      Name: CostReports360API
       ProtocolType: HTTP
       CorsConfiguration:
         AllowOrigins:

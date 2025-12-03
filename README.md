@@ -1,4 +1,4 @@
-# AWS Cost Comparison Report Generator
+# CostReports360
 
 Web application to generate Excel cost comparison reports for AWS accounts.
 
