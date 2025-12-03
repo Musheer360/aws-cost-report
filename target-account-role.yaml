@@ -10,7 +10,7 @@ Resources:
   CostReportReadOnlyRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: CostReportReadOnlyRole
+      RoleName: CostReports360ReadOnlyRole
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:

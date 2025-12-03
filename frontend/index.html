@@ -256,6 +256,7 @@
                     <strong>Step 1:</strong> Download the CloudFormation template and deploy it in your AWS account to create the required role.
                     <br><br>
                     <button class="btn" onclick="downloadTemplate()">📥 Download CloudFormation Template</button>
+                    <button class="btn" onclick="downloadManualInstructions()">📄 Download Manual Instructions</button>
                 </div>
                 <br>
                 <div class="form-group">
@@ -272,7 +273,7 @@
     </div>
 
     <script>
-        const API_ENDPOINT = 'PLACEHOLDER_API_ENDPOINT';
+        const API_ENDPOINT = 'https://o52tpbmni5.execute-api.ap-south-1.amazonaws.com/prod/generate';
         
         const months = ['January', 'February', 'March', 'April', 'May', 'June', 
                        'July', 'August', 'September', 'October', 'November', 'December'];
@@ -360,7 +361,7 @@ Parameters:
   TrustedAccountId:
     Type: String
     Description: Account ID where CostReports360 is deployed
-    Default: 'ACCOUNT_ID_PLACEHOLDER'
+    Default: '162290422654'
 
 Resources:
   CostReports360ReadOnlyRole:
@@ -395,6 +396,102 @@ Outputs:
             const a = document.createElement('a');
             a.href = url;
             a.download = 'costreports360-role.yaml';
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+        
+        function downloadManualInstructions() {
+            const instructions = `# Manual Role Creation Instructions for CostReports360
+
+## Prerequisites
+- Access to AWS Console
+- Administrator permissions in the target AWS account
+
+## Steps to Create the Role via AWS Console
+
+### Step 1: Navigate to IAM
+
+1. Sign in to the AWS Console
+2. Go to **IAM** service (search for "IAM" in the top search bar)
+3. Click on **Roles** in the left sidebar
+4. Click **Create role** button
+
+### Step 2: Configure Trust Relationship
+
+1. Select **AWS account** as the trusted entity type
+2. Choose **Another AWS account**
+3. Enter the Account ID: **162290422654**
+4. Click **Next**
+
+### Step 3: Add Permissions
+
+1. In the permissions policies search box, type: **Cost Explorer**
+2. You won't find a pre-built policy, so click **Next** (we'll add inline policy later)
+3. Click **Next** again
+
+### Step 4: Name and Create Role
+
+1. Role name: **CostReports360ReadOnlyRole** (must be exact)
+2. Description: *Read-only role for CostReports360 cross-account access*
+3. Click **Create role**
+
+### Step 5: Add Inline Policy for Cost Explorer
+
+1. Find and click on the newly created role **CostReports360ReadOnlyRole**
+2. Go to the **Permissions** tab
+3. Click **Add permissions** → **Create inline policy**
+4. Click on the **JSON** tab
+5. Paste the following policy:
+
+\`\`\`json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "ce:GetCostAndUsage",
+        "ce:GetCostForecast"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
+\`\`\`
+
+6. Click **Next**
+7. Policy name: **CostExplorerReadOnly**
+8. Click **Create policy**
+
+### Step 6: Verify the Role
+
+1. Go back to the role details page
+2. Verify the **Trust relationships** tab shows Account ID: **162290422654**
+3. Verify the **Permissions** tab shows the inline policy **CostExplorerReadOnly**
+4. Copy the **Role ARN** for reference (optional)
+
+## Important Notes
+
+- The role name must be exactly **CostReports360ReadOnlyRole**
+- The trusted account ID is **162290422654** (where CostReports360 is deployed)
+- Ensure Cost Explorer is enabled in your AWS account
+- The role grants read-only access to Cost Explorer data only
+
+## Troubleshooting
+
+If you encounter issues:
+1. Verify the trust relationship has the correct account ID: **162290422654**
+2. Ensure Cost Explorer is enabled in your account (Billing → Cost Explorer)
+3. Check that the role name matches exactly: **CostReports360ReadOnlyRole**
+4. Verify you have permissions to create IAM roles
+5. Make sure the inline policy was created successfully
+`;
+            
+            const blob = new Blob([instructions], { type: 'text/markdown' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'costreports360-manual-setup.md';
             a.click();
             URL.revokeObjectURL(url);
         }
