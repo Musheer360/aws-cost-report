@@ -7,6 +7,18 @@ import base64
 from io import BytesIO
 
 def lambda_handler(event, context):
+    # Handle CORS preflight
+    if event.get('requestContext', {}).get('http', {}).get('method') == 'OPTIONS':
+        return {
+            'statusCode': 200,
+            'headers': {
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Headers': 'Content-Type',
+                'Access-Control-Allow-Methods': 'POST, OPTIONS'
+            },
+            'body': ''
+        }
+    
     body = json.loads(event['body'])
     months = body['months']  # Format: ['2025-09', '2025-10']
     client_name = body.get('clientName', 'Client')
@@ -175,7 +187,7 @@ def lambda_handler(event, context):
             'Content-Type': 'application/json',
             'Access-Control-Allow-Origin': '*',
             'Access-Control-Allow-Headers': 'Content-Type',
-            'Access-Control-Allow-Methods': 'POST'
+            'Access-Control-Allow-Methods': 'POST, OPTIONS'
         },
         'body': json.dumps({
             'file': base64.b64encode(buffer.read()).decode('utf-8'),

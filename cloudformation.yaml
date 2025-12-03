@@ -84,9 +84,12 @@ Resources:
         AllowOrigins:
           - '*'
         AllowMethods:
+          - GET
           - POST
+          - OPTIONS
         AllowHeaders:
           - '*'
+        MaxAge: 300
 
   ApiIntegration:
     Type: AWS::ApiGatewayV2::Integration
