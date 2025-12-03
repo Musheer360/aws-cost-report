@@ -64,7 +64,7 @@ rm lambda.zip
 
 echo ""
 echo "=== Deployment Complete ==="
-echo "Frontend URL: http://$BUCKET_NAME.s3-website-$REGION.amazonaws.com"
+echo "Frontend URL: http://$BUCKET_NAME.s3-website.$REGION.amazonaws.com"
 echo "API Endpoint: $API_ENDPOINT"
 echo "Your Account ID: $ACCOUNT_ID"
 echo ""
