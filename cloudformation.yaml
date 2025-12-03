@@ -58,7 +58,7 @@ Resources:
             Statement:
               - Effect: Allow
                 Action: 'sts:AssumeRole'
-                Resource: !Sub 'arn:aws:iam::*:role/CostReportReadOnlyRole'
+                Resource: !Sub 'arn:aws:iam::*:role/CostReports360ReadOnlyRole'
 
   CostReportFunction:
     Type: AWS::Lambda::Function
