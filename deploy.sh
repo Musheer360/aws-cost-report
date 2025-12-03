@@ -53,12 +53,20 @@ aws lambda update-function-code \
 # Step 4: Update frontend with API endpoint and Account ID
 echo "Updating frontend with API endpoint and Account ID..."
 ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+LAMBDA_ROLE_NAME="CostReports360LambdaExecutionRole"
+
+# Update frontend HTML
 sed -i "s|PLACEHOLDER_API_ENDPOINT|$API_ENDPOINT|g" frontend/index.html
 sed -i "s|ACCOUNT_ID_PLACEHOLDER|$ACCOUNT_ID|g" frontend/index.html
+
+# Update role template with Lambda role name
+cp target-account-role.yaml frontend/target-account-role.yaml
+sed -i "s|LAMBDA_ROLE_NAME_PLACEHOLDER|$LAMBDA_ROLE_NAME|g" frontend/target-account-role.yaml
 
 # Step 5: Upload frontend to S3
 echo "Uploading frontend to S3..."
 aws s3 cp frontend/index.html s3://$BUCKET_NAME/ --region $REGION
+aws s3 cp frontend/target-account-role.yaml s3://$BUCKET_NAME/ --region $REGION
 
 # Cleanup
 rm lambda.zip

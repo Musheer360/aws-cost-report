@@ -273,7 +273,7 @@
     </div>
 
     <script>
-        const API_ENDPOINT = 'https://o52tpbmni5.execute-api.ap-south-1.amazonaws.com/prod/generate';
+        const API_ENDPOINT = 'https://a3pj0cr45a.execute-api.ap-south-1.amazonaws.com/prod/generate';
         
         const months = ['January', 'February', 'March', 'April', 'May', 'June', 
                        'July', 'August', 'September', 'October', 'November', 'December'];
@@ -353,51 +353,20 @@
             }
         }
         
-        function downloadTemplate() {
-            const template = `AWSTemplateFormatVersion: '2010-09-09'
-Description: CostReports360 Read-Only Role for Cross-Account Access
-
-Parameters:
-  TrustedAccountId:
-    Type: String
-    Description: Account ID where CostReports360 is deployed
-    Default: '162290422654'
-
-Resources:
-  CostReports360ReadOnlyRole:
-    Type: AWS::IAM::Role
-    Properties:
-      RoleName: CostReports360ReadOnlyRole
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal:
-              AWS: !Sub 'arn:aws:iam::\${TrustedAccountId}:root'
-            Action: 'sts:AssumeRole'
-      Policies:
-        - PolicyName: CostExplorerReadOnly
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Allow
-                Action:
-                  - 'ce:GetCostAndUsage'
-                  - 'ce:GetCostForecast'
-                Resource: '*'
-
-Outputs:
-  RoleArn:
-    Description: ARN of the created role
-    Value: !GetAtt CostReports360ReadOnlyRole.Arn`;
-            
-            const blob = new Blob([template], { type: 'text/yaml' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = 'costreports360-role.yaml';
-            a.click();
-            URL.revokeObjectURL(url);
+        async function downloadTemplate() {
+            try {
+                const response = await fetch('target-account-role.yaml');
+                const template = await response.text();
+                const blob = new Blob([template], { type: 'text/yaml' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'costreports360-role.yaml';
+                a.click();
+                URL.revokeObjectURL(url);
+            } catch (error) {
+                alert('Failed to download template: ' + error.message);
+            }
         }
         
         function downloadManualInstructions() {

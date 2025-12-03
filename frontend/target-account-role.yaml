@@ -18,7 +18,7 @@ Resources:
             Principal:
               AWS: 
                 - !Sub 'arn:aws:iam::${TrustedAccountId}:root'
-                - !Sub 'arn:aws:iam::${TrustedAccountId}:role/LAMBDA_ROLE_NAME_PLACEHOLDER'
+                - !Sub 'arn:aws:iam::${TrustedAccountId}:role/CostReports360LambdaExecutionRole'
             Action: 'sts:AssumeRole'
       Policies:
         - PolicyName: CostExplorerReadOnly
