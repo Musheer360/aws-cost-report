@@ -38,8 +38,8 @@ LAMBDA_NAME=$(aws cloudformation describe-stacks \
 # Step 2: Package Lambda function
 echo "Packaging Lambda function..."
 cd lambda
-pip install -r requirements.txt -t .
-zip -r ../lambda.zip . -x "*.pyc" -x "__pycache__/*"
+pip install -r requirements.txt -t . > /dev/null 2>&1
+zip -r ../lambda.zip . -x "*.pyc" -x "__pycache__/*" > /dev/null 2>&1
 cd ..
 
 # Step 3: Deploy Lambda code
