@@ -273,7 +273,7 @@
     </div>
 
     <script>
-        const API_ENDPOINT = 'PLACEHOLDER_API_ENDPOINT';
+        const API_ENDPOINT = 'https://7l9x2lt9rf.execute-api.ap-south-1.amazonaws.com/prod/generate';
         
         const months = ['January', 'February', 'March', 'April', 'May', 'June', 
                        'July', 'August', 'September', 'October', 'November', 'December'];
@@ -389,7 +389,7 @@
 
 1. Select **AWS account** as the trusted entity type
 2. Choose **Another AWS account**
-3. Enter the Account ID: **162290422654**
+3. Enter the Account ID: **ACCOUNT_ID_PLACEHOLDER**
 4. Click **Next**
 
 ### Step 3: Add Permissions
@@ -435,21 +435,22 @@
 ### Step 6: Verify the Role
 
 1. Go back to the role details page
-2. Verify the **Trust relationships** tab shows Account ID: **162290422654**
+2. Verify the **Trust relationships** tab shows Account ID: **ACCOUNT_ID_PLACEHOLDER**
 3. Verify the **Permissions** tab shows the inline policy **CostExplorerReadOnly**
 4. Copy the **Role ARN** for reference (optional)
 
 ## Important Notes
 
 - The role name must be exactly **CostReports360ReadOnlyRole**
-- The trusted account ID is **162290422654** (where CostReports360 is deployed)
+- The trusted account ID is **ACCOUNT_ID_PLACEHOLDER** (where CostReports360 is deployed)
+- For enhanced security, the role should also trust the Lambda execution role: **CostReports360LambdaExecutionRole**
 - Ensure Cost Explorer is enabled in your AWS account
 - The role grants read-only access to Cost Explorer data only
 
 ## Troubleshooting
 
 If you encounter issues:
-1. Verify the trust relationship has the correct account ID: **162290422654**
+1. Verify the trust relationship has the correct account ID: **ACCOUNT_ID_PLACEHOLDER**
 2. Ensure Cost Explorer is enabled in your account (Billing → Cost Explorer)
 3. Check that the role name matches exactly: **CostReports360ReadOnlyRole**
 4. Verify you have permissions to create IAM roles
