@@ -1,0 +1,38 @@
+# Python dependencies (install via requirements.txt)
+lambda/boto3/
+lambda/botocore/
+lambda/urllib3/
+lambda/PIL/
+lambda/pillow*/
+lambda/openpyxl/
+lambda/*dist-info/
+lambda/__pycache__/
+lambda/bin/
+lambda/jmespath/
+lambda/s3transfer/
+lambda/dateutil/
+lambda/et_xmlfile/
+lambda/six.py
+
+# Python cache
+*.pyc
+__pycache__/
+*.pyo
+*.pyd
+.Python
+
+# Virtual environments
+venv/
+env/
+ENV/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
