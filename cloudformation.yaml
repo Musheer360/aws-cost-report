@@ -69,6 +69,9 @@ Resources:
       Role: !GetAtt LambdaExecutionRole.Arn
       Timeout: 300
       MemorySize: 512
+      Environment:
+        Variables:
+          ALLOWED_ORIGIN: !Sub 'http://${FrontendBucket}.s3-website.${AWS::Region}.amazonaws.com'
       Code:
         ZipFile: |
           # Placeholder - deploy actual code separately

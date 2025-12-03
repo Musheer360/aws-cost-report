@@ -1,5 +1,6 @@
 import json
 import boto3
+import os
 from datetime import datetime
 from openpyxl import Workbook
 from openpyxl.styles import PatternFill, Font, Border, Side, Alignment
@@ -7,12 +8,15 @@ import base64
 from io import BytesIO
 
 def lambda_handler(event, context):
+    # Get allowed origin from environment variable
+    allowed_origin = os.environ.get('ALLOWED_ORIGIN', '*')
+    
     # Handle CORS preflight
     if event.get('requestContext', {}).get('http', {}).get('method') == 'OPTIONS':
         return {
             'statusCode': 200,
             'headers': {
-                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Origin': allowed_origin,
                 'Access-Control-Allow-Headers': 'Content-Type',
                 'Access-Control-Allow-Methods': 'POST, OPTIONS'
             },
@@ -181,11 +185,14 @@ def lambda_handler(event, context):
     months_str = '-'.join(month_names_short)
     filename = f"{client_name_formatted}-{months_str}-CostReport.xlsx"
     
+    # Get allowed origin from environment variable
+    allowed_origin = os.environ.get('ALLOWED_ORIGIN', '*')
+    
     return {
         'statusCode': 200,
         'headers': {
             'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Origin': allowed_origin,
             'Access-Control-Allow-Headers': 'Content-Type',
             'Access-Control-Allow-Methods': 'POST, OPTIONS'
         },
