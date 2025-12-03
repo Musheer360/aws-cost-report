@@ -5,7 +5,7 @@ echo "=== AWS Cost Report Generator Deployment ==="
 
 # Variables
 STACK_NAME="cost-report-generator"
-REGION="${AWS_REGION:-us-east-1}"
+REGION="${AWS_REGION:-ap-south-1}"
 
 # Step 1: Deploy CloudFormation stack
 echo "Deploying CloudFormation stack..."
@@ -51,7 +51,7 @@ aws lambda update-function-code \
 
 # Step 4: Update frontend with API endpoint
 echo "Updating frontend with API endpoint..."
-sed -i "s|YOUR_API_GATEWAY_URL|$API_ENDPOINT|g" frontend/index.html
+sed -i "s|PLACEHOLDER_API_ENDPOINT|$API_ENDPOINT|g" frontend/index.html
 
 # Step 5: Upload frontend to S3
 echo "Uploading frontend to S3..."

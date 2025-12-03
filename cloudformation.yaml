@@ -11,7 +11,6 @@ Resources:
   FrontendBucket:
     Type: AWS::S3::Bucket
     Properties:
-      BucketName: !Sub 'cost-report-frontend-${AWS::AccountId}'
       WebsiteConfiguration:
         IndexDocument: index.html
       PublicAccessBlockConfiguration:
