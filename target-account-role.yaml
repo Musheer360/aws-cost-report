@@ -16,7 +16,7 @@ Resources:
         Statement:
           - Effect: Allow
             Principal:
-              AWS: !Sub 'arn:aws:iam::${TrustedAccountId}:role/CostReportLambdaRole'
+              AWS: !Sub 'arn:aws:iam::${TrustedAccountId}:root'
             Action: 'sts:AssumeRole'
       Policies:
         - PolicyName: CostExplorerReadOnly
