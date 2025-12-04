@@ -234,8 +234,8 @@
             <div class="form-group">
                 <label>Choose Method</label>
                 <select id="authMethod" onchange="toggleAuthMethod()">
-                    <option value="credentials">AWS Credentials</option>
                     <option value="role">Cross-Account Role (Recommended)</option>
+                    <option value="credentials">AWS Credentials</option>
                 </select>
             </div>
 
@@ -260,8 +260,8 @@
                 </div>
                 <br>
                 <div class="form-group">
-                    <label>Your AWS Account ID (12 digits)</label>
-                    <input type="text" id="targetAccountId" placeholder="123456789012" pattern="[0-9]{12}" maxlength="12">
+                    <label>Role ARN from Target Account</label>
+                    <input type="text" id="roleArn" placeholder="arn:aws:iam::123456789012:role/CostReports360ReadOnlyRole">
                 </div>
             </div>
         </div>
@@ -273,7 +273,7 @@
     </div>
 
     <script>
-        const API_ENDPOINT = 'PLACEHOLDER_API_ENDPOINT';
+        const API_ENDPOINT = 'https://lkl51kt0ri.execute-api.ap-south-1.amazonaws.com/prod/generate';
         
         const months = ['January', 'February', 'March', 'April', 'May', 'June', 
                        'July', 'August', 'September', 'October', 'November', 'December'];
@@ -389,7 +389,7 @@
 
 1. Select **AWS account** as the trusted entity type
 2. Choose **Another AWS account**
-3. Enter the Account ID: **ACCOUNT_ID_PLACEHOLDER**
+3. Enter the Account ID: **162290422654**
 4. Click **Next**
 
 ### Step 3: Add Permissions
@@ -435,14 +435,14 @@
 ### Step 6: Verify the Role
 
 1. Go back to the role details page
-2. Verify the **Trust relationships** tab shows Account ID: **ACCOUNT_ID_PLACEHOLDER**
+2. Verify the **Trust relationships** tab shows Account ID: **162290422654**
 3. Verify the **Permissions** tab shows the inline policy **CostExplorerReadOnly**
 4. Copy the **Role ARN** for reference (optional)
 
 ## Important Notes
 
 - The role name must be exactly **CostReports360ReadOnlyRole**
-- The trusted account ID is **ACCOUNT_ID_PLACEHOLDER** (where CostReports360 is deployed)
+- The trusted account ID is **162290422654** (where CostReports360 is deployed)
 - For enhanced security, the role should also trust the Lambda execution role: **CostReports360LambdaExecutionRole**
 - Ensure Cost Explorer is enabled in your AWS account
 - The role grants read-only access to Cost Explorer data only
@@ -450,7 +450,7 @@
 ## Troubleshooting
 
 If you encounter issues:
-1. Verify the trust relationship has the correct account ID: **ACCOUNT_ID_PLACEHOLDER**
+1. Verify the trust relationship has the correct account ID: **162290422654**
 2. Ensure Cost Explorer is enabled in your account (Billing → Cost Explorer)
 3. Check that the role name matches exactly: **CostReports360ReadOnlyRole**
 4. Verify you have permissions to create IAM roles
@@ -505,15 +505,15 @@ If you encounter issues:
                 requestBody.accessKeyId = accessKeyId;
                 requestBody.secretAccessKey = secretAccessKey;
             } else {
-                const targetAccountId = document.getElementById('targetAccountId').value;
+                const roleArn = document.getElementById('roleArn').value;
                 
-                if (!targetAccountId || !/^[0-9]{12}$/.test(targetAccountId)) {
+                if (!roleArn || !roleArn.startsWith('arn:aws:iam::')) {
                     status.className = 'status error';
-                    status.textContent = 'Please provide valid 12-digit AWS Account ID';
+                    status.textContent = 'Please provide valid Role ARN';
                     return;
                 }
                 
-                requestBody.targetAccountId = targetAccountId;
+                requestBody.roleArn = roleArn;
             }
             
             try {

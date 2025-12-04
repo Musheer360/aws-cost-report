@@ -28,10 +28,10 @@ def lambda_handler(event, context):
     client_name = body.get('clientName', 'Client')
     
     # Support both auth methods
-    if 'targetAccountId' in body:
+    if 'roleArn' in body:
         # Role-based auth
         sts = boto3.client('sts')
-        role_arn = f"arn:aws:iam::{body['targetAccountId']}:role/CostReports360ReadOnlyRole"
+        role_arn = body['roleArn']
         assumed_role = sts.assume_role(
             RoleArn=role_arn,
             RoleSessionName='CostReports360Session'
