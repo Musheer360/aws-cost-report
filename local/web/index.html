@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CostReports360 - Local</title>
+    <title>CostReports360</title>
     <link href="https://fonts.googleapis.com/css2?family=Amazon+Ember:wght@400;700&family=Open+Sans:wght@400;600&display=swap" rel="stylesheet">
     <style>
         * {
@@ -55,16 +55,6 @@
         .header p {
             color: #FFFFFF;
             font-size: 1.1rem;
-        }
-
-        .local-badge {
-            display: inline-block;
-            background: #28a745;
-            color: white;
-            padding: 5px 15px;
-            border-radius: 20px;
-            font-size: 0.9rem;
-            margin-top: 10px;
         }
         
         .card {
@@ -219,7 +209,6 @@
             <img src="https://apn-portal.my.salesforce.com/servlet/servlet.ImageServer?id=0150L00000AUiBnQAL&oid=00DE0000000c48tMAA" alt="CloudThat Logo" class="logo">
             <h1>CostReports360</h1>
             <p>Generate detailed AWS cost analysis reports with regional breakdowns</p>
-            <span class="local-badge">🖥️ Running Locally</span>
         </div>
         
         <div class="card">
@@ -244,12 +233,12 @@
             <br>
             <div class="form-group">
                 <label>AWS Access Key ID</label>
-                <input type="text" id="accessKeyId" placeholder="AKIAIOSFODNN7EXAMPLE" required>
+                <input type="text" id="accessKeyId" placeholder="Enter your AWS Access Key ID" required>
             </div>
             
             <div class="form-group">
                 <label>AWS Secret Access Key</label>
-                <input type="password" id="secretAccessKey" placeholder="wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY" required>
+                <input type="password" id="secretAccessKey" placeholder="Enter your AWS Secret Access Key" required>
             </div>
             
             <div class="form-group">

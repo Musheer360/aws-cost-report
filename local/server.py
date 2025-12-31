@@ -50,18 +50,38 @@ def generate_report():
     
     try:
         body = request.get_json()
+        if not body:
+            return jsonify({'message': 'Request body is required'}), 400
+        
+        # Validate required fields
+        if 'months' not in body or not isinstance(body['months'], list):
+            return jsonify({'message': 'months is required and must be a list'}), 400
+        
         months = body['months']
+        if len(months) < 2 or len(months) > 6:
+            return jsonify({'message': 'Please select 2-6 months'}), 400
+        
+        # Validate month format
+        for month in months:
+            try:
+                datetime.strptime(month, "%Y-%m")
+            except ValueError:
+                return jsonify({'message': f'Invalid month format: {month}. Use YYYY-MM format.'}), 400
+        
         client_name = body.get('clientName', 'Client')
         
         # Require credentials from request body - no CLI or role-based auth
         if 'accessKeyId' not in body or 'secretAccessKey' not in body:
             return jsonify({'message': 'AWS credentials (accessKeyId and secretAccessKey) are required'}), 400
         
+        if not body['accessKeyId'].strip() or not body['secretAccessKey'].strip():
+            return jsonify({'message': 'AWS credentials cannot be empty'}), 400
+        
         # Create AWS session using provided credentials only
         session = boto3.Session(
-            aws_access_key_id=body['accessKeyId'],
-            aws_secret_access_key=body['secretAccessKey'],
-            region_name=body.get('region', 'us-east-1')
+            aws_access_key_id=body['accessKeyId'].strip(),
+            aws_secret_access_key=body['secretAccessKey'].strip(),
+            region_name=body.get('region', 'us-east-1').strip() or 'us-east-1'
         )
         
         ce = session.client('ce')
@@ -491,8 +511,19 @@ def generate_detailed_reason(month_names, data, month_costs, months):
     if len(month_costs) < 2:
         return "Insufficient data"
     
-    change = month_costs[-1] - month_costs[0]
-    pct = (change / month_costs[0] * 100) if month_costs[0] > 0 else 0
+    first_cost = month_costs[0]
+    last_cost = month_costs[-1]
+    change = last_cost - first_cost
+    
+    # Check for zero cost in both months
+    if first_cost == 0 and last_cost == 0:
+        return "Zero cost."
+    
+    # Check for exact same cost (no difference)
+    if change == 0:
+        return "No cost difference."
+    
+    pct = (change / first_cost * 100) if first_cost > 0 else 0
     
     if abs(pct) < MINIMAL_CHANGE_THRESHOLD:
         return "Minimal Cost Difference"
@@ -529,8 +560,19 @@ def generate_simple_reason(costs):
     if len(costs) < 2:
         return "Insufficient data"
     
-    change = costs[-1] - costs[0]
-    pct = (change / costs[0] * 100) if costs[0] > 0 else 0
+    first_cost = costs[0]
+    last_cost = costs[-1]
+    change = last_cost - first_cost
+    
+    # Check for zero cost in both months
+    if first_cost == 0 and last_cost == 0:
+        return "Zero cost."
+    
+    # Check for exact same cost (no difference)
+    if change == 0:
+        return "No cost difference."
+    
+    pct = (change / first_cost * 100) if first_cost > 0 else 0
     
     if abs(pct) < MINIMAL_CHANGE_THRESHOLD:
         return "Minimal Cost Difference"

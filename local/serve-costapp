@@ -6,7 +6,7 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SERVICE_NAME="costreports360"
-PORT="${COSTAPP_PORT:-5000}"
+PORT="${PORT:-5000}"
 PID_FILE="/tmp/${SERVICE_NAME}.pid"
 LOG_FILE="/tmp/${SERVICE_NAME}.log"
 
@@ -78,9 +78,9 @@ start_server() {
         print_status "Dependencies installed"
     fi
 
-    # Start the server in the background
+    # Start the server in the background with PORT environment variable
     cd "$SCRIPT_DIR"
-    nohup python3 "$SCRIPT_DIR/server.py" > "$LOG_FILE" 2>&1 &
+    PORT=$PORT nohup python3 "$SCRIPT_DIR/server.py" > "$LOG_FILE" 2>&1 &
     SERVER_PID=$!
     echo "$SERVER_PID" > "$PID_FILE"
 
