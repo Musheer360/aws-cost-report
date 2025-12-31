@@ -69,8 +69,8 @@ if [ -f "$PID_FILE" ]; then
     fi
     rm -f "$PID_FILE"
 else
-    # Try to find and kill any running server process
-    PIDS=$(pgrep -f "python3.*server.py" 2>/dev/null || true)
+    # Try to find and kill any running server process from this specific directory
+    PIDS=$(pgrep -f "python3 $SCRIPT_DIR/server.py" 2>/dev/null || true)
     if [ -n "$PIDS" ]; then
         for PID in $PIDS; do
             kill "$PID" 2>/dev/null || true

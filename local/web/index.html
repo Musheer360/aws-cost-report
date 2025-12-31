@@ -211,15 +211,6 @@
         .info-box strong {
             color: #23649c;
         }
-
-        .auth-info {
-            background: #d4edda;
-            border-left: 4px solid #28a745;
-            padding: 15px;
-            margin-bottom: 20px;
-            border-radius: 4px;
-            color: #155724;
-        }
     </style>
 </head>
 <body>
@@ -246,53 +237,25 @@
         </div>
         
         <div class="card">
-            <h3>Authentication Method</h3>
-            <div class="auth-info">
-                <strong>💡 Local Mode:</strong> By default, uses your AWS CLI credentials. You can also enter credentials manually below.
+            <h3>AWS Credentials</h3>
+            <div class="info-box">
+                <strong>🔐 Security Note:</strong> Enter your AWS credentials below. These are used only for this request and are not stored.
             </div>
+            <br>
             <div class="form-group">
-                <label>Choose Method</label>
-                <select id="authMethod" onchange="toggleAuthMethod()">
-                    <option value="cli">Use AWS CLI Credentials (Default)</option>
-                    <option value="credentials">Enter AWS Credentials Manually</option>
-                    <option value="role">Cross-Account Role</option>
-                </select>
+                <label>AWS Access Key ID</label>
+                <input type="text" id="accessKeyId" placeholder="AKIAIOSFODNN7EXAMPLE" required>
             </div>
-
-            <div id="cliAuth">
-                <div class="form-group">
-                    <label>AWS Profile (Optional)</label>
-                    <input type="text" id="awsProfile" placeholder="default">
-                    <small style="color: #666;">Leave empty to use default profile</small>
-                </div>
-                
-                <div class="form-group">
-                    <label>AWS Region</label>
-                    <input type="text" id="awsRegion" value="us-east-1" placeholder="us-east-1">
-                </div>
+            
+            <div class="form-group">
+                <label>AWS Secret Access Key</label>
+                <input type="password" id="secretAccessKey" placeholder="wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY" required>
             </div>
-
-            <div id="credentialsAuth" style="display:none;">
-                <div class="form-group">
-                    <label>AWS Access Key ID</label>
-                    <input type="text" id="accessKeyId" placeholder="AKIAIOSFODNN7EXAMPLE">
-                </div>
-                
-                <div class="form-group">
-                    <label>AWS Secret Access Key</label>
-                    <input type="password" id="secretAccessKey" placeholder="wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY">
-                </div>
-            </div>
-
-            <div id="roleAuth" style="display:none;">
-                <div class="info-box">
-                    <strong>Note:</strong> Cross-account role support requires that your local AWS credentials have permission to assume the target role.
-                </div>
-                <br>
-                <div class="form-group">
-                    <label>Role ARN from Target Account</label>
-                    <input type="text" id="roleArn" placeholder="arn:aws:iam::123456789012:role/CostReports360ReadOnlyRole">
-                </div>
+            
+            <div class="form-group">
+                <label>AWS Region (Optional)</label>
+                <input type="text" id="awsRegion" value="us-east-1" placeholder="us-east-1">
+                <small style="color: #666;">Default: us-east-1 (recommended for Cost Explorer)</small>
             </div>
         </div>
         
@@ -370,25 +333,6 @@
             return months;
         }
         
-        function toggleAuthMethod() {
-            const method = document.getElementById('authMethod').value;
-            const cliAuth = document.getElementById('cliAuth');
-            const credentialsAuth = document.getElementById('credentialsAuth');
-            const roleAuth = document.getElementById('roleAuth');
-            
-            cliAuth.style.display = 'none';
-            credentialsAuth.style.display = 'none';
-            roleAuth.style.display = 'none';
-            
-            if (method === 'cli') {
-                cliAuth.style.display = 'block';
-            } else if (method === 'credentials') {
-                credentialsAuth.style.display = 'block';
-            } else {
-                roleAuth.style.display = 'block';
-            }
-        }
-        
         async function generateReport() {
             const status = document.getElementById('status');
             status.className = 'status loading';
@@ -396,6 +340,9 @@
             
             const clientName = document.getElementById('clientName').value.trim();
             const months = getSelectedMonths();
+            const accessKeyId = document.getElementById('accessKeyId').value.trim();
+            const secretAccessKey = document.getElementById('secretAccessKey').value.trim();
+            const region = document.getElementById('awsRegion').value.trim() || 'us-east-1';
             
             if (!clientName) {
                 status.className = 'status error';
@@ -409,43 +356,19 @@
                 return;
             }
             
-            const authMethod = document.getElementById('authMethod').value;
-            let requestBody = {
-                clientName: clientName,
-                months: months
-            };
-            
-            if (authMethod === 'cli') {
-                const profile = document.getElementById('awsProfile').value.trim();
-                const region = document.getElementById('awsRegion').value.trim() || 'us-east-1';
-                
-                if (profile) {
-                    requestBody.profile = profile;
-                }
-                requestBody.region = region;
-            } else if (authMethod === 'credentials') {
-                const accessKeyId = document.getElementById('accessKeyId').value;
-                const secretAccessKey = document.getElementById('secretAccessKey').value;
-                
-                if (!accessKeyId || !secretAccessKey) {
-                    status.className = 'status error';
-                    status.textContent = 'Please provide AWS credentials';
-                    return;
-                }
-                
-                requestBody.accessKeyId = accessKeyId;
-                requestBody.secretAccessKey = secretAccessKey;
-            } else {
-                const roleArn = document.getElementById('roleArn').value;
-                
-                if (!roleArn || !roleArn.startsWith('arn:aws:iam::')) {
-                    status.className = 'status error';
-                    status.textContent = 'Please provide valid Role ARN';
-                    return;
-                }
-                
-                requestBody.roleArn = roleArn;
+            if (!accessKeyId || !secretAccessKey) {
+                status.className = 'status error';
+                status.textContent = 'Please provide AWS credentials';
+                return;
             }
+            
+            const requestBody = {
+                clientName: clientName,
+                months: months,
+                accessKeyId: accessKeyId,
+                secretAccessKey: secretAccessKey,
+                region: region
+            };
             
             try {
                 const response = await fetch(API_ENDPOINT, {
@@ -489,9 +412,6 @@
             addMonth();
             addMonth();
         });
-        
-        // Initialize auth method display on page load
-        toggleAuthMethod();
     </script>
 </body>
 </html>

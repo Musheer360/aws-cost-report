@@ -42,13 +42,11 @@ Full web interface running locally on your Linux machine.
 - Runs on http://localhost:5000
 - Start/stop with simple commands
 - Auto-start on system boot
-- Uses AWS CLI credentials or manual credentials
-- Cross-account IAM role support
+- Enter AWS credentials directly in the web form
 
 **Requirements:**
 - Python 3.8+
-- AWS CLI configured with valid credentials
-- IAM permissions: `ce:GetCostAndUsage`, `ce:GetCostForecast`
+- AWS credentials with IAM permissions: `ce:GetCostAndUsage`, `ce:GetCostForecast`
 
 ### Option 3: Local CLI Only
 
@@ -142,10 +140,7 @@ Once started, access the web interface at:
 - **Frontend**: http://localhost:5000
 - **API**: http://localhost:5000/api/generate
 
-The web interface supports:
-- AWS CLI credentials (uses your local `~/.aws/credentials`)
-- Manual AWS credentials entry
-- Cross-account IAM role assumption
+Enter your AWS credentials directly in the web form to generate reports. Credentials are used only for the request and are not stored.
 
 ## Local CLI Usage (Linux/WSL)
 

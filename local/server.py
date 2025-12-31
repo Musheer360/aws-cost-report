@@ -44,7 +44,7 @@ def serve_static(filename):
 
 @app.route('/api/generate', methods=['POST', 'OPTIONS'])
 def generate_report():
-    """Generate cost report - mirrors Lambda functionality."""
+    """Generate cost report - uses credentials provided in request body only."""
     if request.method == 'OPTIONS':
         return '', 200
     
@@ -53,36 +53,16 @@ def generate_report():
         months = body['months']
         client_name = body.get('clientName', 'Client')
         
-        # Create AWS session based on auth method
-        if 'roleArn' in body:
-            # Role-based auth
-            sts = boto3.client('sts')
-            role_arn = body['roleArn']
-            assumed_role = sts.assume_role(
-                RoleArn=role_arn,
-                RoleSessionName='CostReports360Session'
-            )
-            session = boto3.Session(
-                aws_access_key_id=assumed_role['Credentials']['AccessKeyId'],
-                aws_secret_access_key=assumed_role['Credentials']['SecretAccessKey'],
-                aws_session_token=assumed_role['Credentials']['SessionToken'],
-                region_name='us-east-1'
-            )
-        elif 'accessKeyId' in body and 'secretAccessKey' in body:
-            # Credentials auth
-            session = boto3.Session(
-                aws_access_key_id=body['accessKeyId'],
-                aws_secret_access_key=body['secretAccessKey'],
-                region_name=body.get('region', 'us-east-1')
-            )
-        else:
-            # Use default AWS CLI credentials
-            profile = body.get('profile')
-            region = body.get('region', 'us-east-1')
-            if profile:
-                session = boto3.Session(profile_name=profile, region_name=region)
-            else:
-                session = boto3.Session(region_name=region)
+        # Require credentials from request body - no CLI or role-based auth
+        if 'accessKeyId' not in body or 'secretAccessKey' not in body:
+            return jsonify({'message': 'AWS credentials (accessKeyId and secretAccessKey) are required'}), 400
+        
+        # Create AWS session using provided credentials only
+        session = boto3.Session(
+            aws_access_key_id=body['accessKeyId'],
+            aws_secret_access_key=body['secretAccessKey'],
+            region_name=body.get('region', 'us-east-1')
+        )
         
         ce = session.client('ce')
         
@@ -213,6 +193,7 @@ def generate_report():
         buffer = BytesIO()
         wb.save(buffer)
         buffer.seek(0)
+        file_content = buffer.read()
         
         # Format filename
         client_name_formatted = client_name.replace(' ', '-')
@@ -220,7 +201,7 @@ def generate_report():
         filename = f"{client_name_formatted}-{months_str}-CostReport.xlsx"
         
         return jsonify({
-            'file': base64.b64encode(buffer.read()).decode('utf-8'),
+            'file': base64.b64encode(file_content).decode('utf-8'),
             'filename': filename
         })
     

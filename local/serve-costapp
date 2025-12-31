@@ -61,16 +61,20 @@ start_server() {
         exit 0
     fi
 
-    # Check for virtual environment
+    # Check for virtual environment and use it if available
     if [ -d "$SCRIPT_DIR/venv" ]; then
         source "$SCRIPT_DIR/venv/bin/activate"
         print_status "Using virtual environment"
+        PIP_CMD="pip"
+    else
+        PIP_CMD="pip3"
     fi
 
     # Check Python dependencies
     if ! python3 -c "import flask" 2>/dev/null; then
-        print_error "Flask is not installed. Installing dependencies..."
-        pip3 install -r "$SCRIPT_DIR/requirements.txt" -q
+        print_warning "Flask is not installed."
+        echo "         Installing dependencies..."
+        $PIP_CMD install -r "$SCRIPT_DIR/requirements.txt" -q
         print_status "Dependencies installed"
     fi
 
