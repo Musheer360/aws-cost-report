@@ -12,6 +12,11 @@ from datetime import datetime
 from openpyxl import Workbook
 from openpyxl.styles import PatternFill, Font, Border, Side, Alignment
 
+# Cost change thresholds (as percentages)
+MINIMAL_CHANGE_THRESHOLD = 5  # Changes below this percentage are considered minimal
+HIGH_CHANGE_THRESHOLD = 20    # Changes above this are highlighted as significant
+MIN_SIGNIFICANT_COST = 0.01   # Minimum cost difference to be considered significant
+
 
 def get_aws_session(profile=None, region='us-east-1'):
     """Create AWS session using local credentials."""
@@ -21,7 +26,7 @@ def get_aws_session(profile=None, region='us-east-1'):
         else:
             session = boto3.Session(region_name=region)
         
-        # Test the credentials
+        # Verify credentials and display authentication info
         sts = session.client('sts')
         identity = sts.get_caller_identity()
         print(f"✓ Authenticated as: {identity['Arn']}")
@@ -137,7 +142,7 @@ def categorize_services(sorted_services, months):
             change = month_costs[-1] - month_costs[0]
             pct = (change / month_costs[0] * 100) if month_costs[0] > 0 else 0
             
-            if abs(pct) < 5:
+            if abs(pct) < MINIMAL_CHANGE_THRESHOLD:
                 same_services.append((service, data))
             elif change > 0:
                 increased_services.append((service, data))
@@ -226,7 +231,7 @@ def generate_detailed_reason(month_names, data, month_costs, months):
     change = month_costs[-1] - month_costs[0]
     pct = (change / month_costs[0] * 100) if month_costs[0] > 0 else 0
     
-    if abs(pct) < 5:
+    if abs(pct) < MINIMAL_CHANGE_THRESHOLD:
         return "Minimal Cost Difference"
     
     first_month = months[0]
@@ -247,7 +252,7 @@ def generate_detailed_reason(month_names, data, month_costs, months):
     
     lines = [f"Cost {'increased' if change > 0 else 'decreased'} by USD {abs(change):,.2f} ({abs(pct):.1f}%)"]
     
-    significant_changes = [c for c in changes[:3] if abs(c[1]) > 0.01]
+    significant_changes = [c for c in changes[:3] if abs(c[1]) > MIN_SIGNIFICANT_COST]
     if significant_changes:
         lines.append("\nTop changes:")
         for usage_type, diff, first, last in significant_changes:
@@ -264,7 +269,7 @@ def generate_simple_reason(costs):
     change = costs[-1] - costs[0]
     pct = (change / costs[0] * 100) if costs[0] > 0 else 0
     
-    if abs(pct) < 5:
+    if abs(pct) < MINIMAL_CHANGE_THRESHOLD:
         return "Minimal Cost Difference"
     elif change > 0:
         return f"Cost increased by USD {abs(change):,.2f} ({abs(pct):.1f}% increase)"
@@ -336,10 +341,10 @@ def create_service_sheet(ws, sorted_services, months, month_names):
             change = month_costs[-1] - month_costs[0]
             pct = (change / month_costs[0] * 100) if month_costs[0] > 0 else 0
             
-            if abs(pct) < 5:
+            if abs(pct) < MINIMAL_CHANGE_THRESHOLD:
                 fill = blue_fill
             elif change > 0:
-                fill = dark_red if pct > 20 else light_red
+                fill = dark_red if pct > HIGH_CHANGE_THRESHOLD else light_red
             else:
                 fill = light_green
             

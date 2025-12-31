@@ -98,19 +98,24 @@ chmod +x "$SCRIPT_DIR/cost_report_cli.py"
 
 # Create convenience wrapper script
 WRAPPER_SCRIPT="$SCRIPT_DIR/costreport"
+create_wrapper() {
+    local use_venv=$1
+    local wrapper_path=$2
+    
+    echo '#!/bin/bash' > "$wrapper_path"
+    echo 'SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"' >> "$wrapper_path"
+    
+    if [[ "$use_venv" == "true" ]]; then
+        echo 'source "$SCRIPT_DIR/venv/bin/activate"' >> "$wrapper_path"
+    fi
+    
+    echo 'python3 "$SCRIPT_DIR/cost_report_cli.py" "$@"' >> "$wrapper_path"
+}
+
 if [[ "$create_venv" =~ ^[Yy]$ ]]; then
-    cat > "$WRAPPER_SCRIPT" << 'EOF'
-#!/bin/bash
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$SCRIPT_DIR/venv/bin/activate"
-python3 "$SCRIPT_DIR/cost_report_cli.py" "$@"
-EOF
+    create_wrapper "true" "$WRAPPER_SCRIPT"
 else
-    cat > "$WRAPPER_SCRIPT" << 'EOF'
-#!/bin/bash
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-python3 "$SCRIPT_DIR/cost_report_cli.py" "$@"
-EOF
+    create_wrapper "false" "$WRAPPER_SCRIPT"
 fi
 chmod +x "$WRAPPER_SCRIPT"
 echo "✓ Created convenience wrapper: $WRAPPER_SCRIPT"
