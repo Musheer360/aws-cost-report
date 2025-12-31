@@ -241,7 +241,7 @@ Headers are yellow with bold text, matching the reference format.
 ### Local Web Server
 
 - **"Server already running"**: Run `./local/stop-costapp` first, then start again
-- **"Port 5000 in use"**: Set a different port: `COSTAPP_PORT=8080 ./local/serve-costapp`
+- **"Port 5000 in use"**: Set a different port: `PORT=8080 ./local/serve-costapp`
 - **"systemd not available"**: Auto-start won't work, but server will still run
 
 ### Local CLI

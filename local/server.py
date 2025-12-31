@@ -77,11 +77,12 @@ def generate_report():
         if not body['accessKeyId'].strip() or not body['secretAccessKey'].strip():
             return jsonify({'message': 'AWS credentials cannot be empty'}), 400
         
-        # Create AWS session using provided credentials only
+        # Create AWS session using provided credentials
+        # Cost Explorer API is global; us-east-1 is the recommended endpoint
         session = boto3.Session(
             aws_access_key_id=body['accessKeyId'].strip(),
             aws_secret_access_key=body['secretAccessKey'].strip(),
-            region_name=body.get('region', 'us-east-1').strip() or 'us-east-1'
+            region_name='us-east-1'
         )
         
         ce = session.client('ce')
@@ -584,7 +585,8 @@ def generate_simple_reason(costs):
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
-    host = os.environ.get('HOST', '0.0.0.0')
+    # Default to localhost only for security (handles AWS credentials)
+    host = os.environ.get('HOST', '127.0.0.1')
     print(f"\n{'='*60}")
     print("CostReports360 - Local Web Server")
     print(f"{'='*60}")

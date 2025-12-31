@@ -240,12 +240,6 @@
                 <label>AWS Secret Access Key</label>
                 <input type="password" id="secretAccessKey" placeholder="Enter your AWS Secret Access Key" required>
             </div>
-            
-            <div class="form-group">
-                <label>AWS Region (Optional)</label>
-                <input type="text" id="awsRegion" value="us-east-1" placeholder="us-east-1">
-                <small style="color: #666;">Default: us-east-1 (recommended for Cost Explorer)</small>
-            </div>
         </div>
         
         <div class="card">
@@ -331,7 +325,6 @@
             const months = getSelectedMonths();
             const accessKeyId = document.getElementById('accessKeyId').value.trim();
             const secretAccessKey = document.getElementById('secretAccessKey').value.trim();
-            const region = document.getElementById('awsRegion').value.trim() || 'us-east-1';
             
             if (!clientName) {
                 status.className = 'status error';
@@ -355,8 +348,7 @@
                 clientName: clientName,
                 months: months,
                 accessKeyId: accessKeyId,
-                secretAccessKey: secretAccessKey,
-                region: region
+                secretAccessKey: secretAccessKey
             };
             
             try {
