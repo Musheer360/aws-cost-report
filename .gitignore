@@ -18,6 +18,9 @@ lambda/six.py
 local/costreport
 local/venv/
 
+# Local server runtime files
+/tmp/costreports360.*
+
 # Python cache
 *.pyc
 __pycache__/
