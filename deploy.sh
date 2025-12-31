@@ -1,7 +1,54 @@
 #!/bin/bash
 set -e
 
-echo "=== AWS Cost Report Generator Deployment ==="
+echo ""
+echo "=========================================="
+echo "   CostReports360 - Deployment Installer"
+echo "=========================================="
+echo ""
+echo "Choose deployment mode:"
+echo ""
+echo "  1) AWS Cloud Deployment"
+echo "     - Deploys Lambda, API Gateway, S3 frontend"
+echo "     - Supports cross-account IAM roles"
+echo "     - Supports AWS credentials authentication"
+echo "     - Requires AWS account with admin permissions"
+echo ""
+echo "  2) Local Installation (Linux/WSL)"
+echo "     - Runs locally on your machine"
+echo "     - Uses AWS CLI credentials only"
+echo "     - No AWS infrastructure needed"
+echo "     - No cross-account role support"
+echo ""
+read -p "Select deployment mode (1 or 2): " DEPLOY_MODE
+
+case $DEPLOY_MODE in
+    1)
+        echo ""
+        echo "=== AWS Cloud Deployment Selected ==="
+        ;;
+    2)
+        echo ""
+        echo "=== Local Installation Selected ==="
+        echo ""
+        
+        # Get the script directory
+        SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+        
+        # Run local installer
+        if [ -f "$SCRIPT_DIR/local/install.sh" ]; then
+            bash "$SCRIPT_DIR/local/install.sh"
+        else
+            echo "Error: local/install.sh not found"
+            exit 1
+        fi
+        exit 0
+        ;;
+    *)
+        echo "Invalid option. Please run again and select 1 or 2."
+        exit 1
+        ;;
+esac
 
 # Variables
 STACK_NAME="costreports360"

@@ -6,40 +6,120 @@ Web application to generate Excel cost comparison reports for AWS accounts.
 
 - Compare 2-6 months of AWS costs
 - Excel reports with color-coded headers and detailed breakdowns
-- Two authentication methods:
+- Two deployment modes:
+  - **AWS Cloud**: Full-featured web application with Lambda, API Gateway, S3
+  - **Local (Linux/WSL)**: Command-line tool using AWS CLI credentials
+- Two authentication methods (AWS Cloud mode):
   - IAM Role (for cross-account access)
   - AWS Credentials (direct access)
 - Excludes tax from cost calculations
 - Uses AWS Cost Explorer API
 
-## Architecture
+## Deployment Options
+
+### Option 1: AWS Cloud Deployment
+
+Full-featured web application hosted on AWS.
+
+**Features:**
+- Web-based UI hosted on S3
+- Cross-account IAM role support
+- AWS credentials authentication
+- Shareable frontend URL
+
+**Requirements:**
+- AWS CLI configured with admin permissions
+- Ability to create CloudFormation stacks, Lambda, S3, API Gateway, IAM roles
+
+### Option 2: Local Installation (Linux/WSL)
+
+Command-line tool that runs locally on your machine.
+
+**Features:**
+- No AWS infrastructure required
+- Uses AWS CLI credentials
+- Generates same Excel reports as cloud version
+- Works on any Linux system or WSL
+
+**Requirements:**
+- Python 3.8+
+- AWS CLI configured with valid credentials
+- IAM permissions: `ce:GetCostAndUsage`, `ce:GetCostForecast`
+
+**Limitations:**
+- No cross-account IAM role support (only AWS CLI credentials)
+- Command-line interface only (no web UI)
+
+## Quick Start
+
+### Interactive Installer
+
+Run the deploy script and choose your deployment mode:
+
+```bash
+./deploy.sh
+```
+
+The installer will prompt you to choose:
+1. **AWS Cloud Deployment** - Full web application
+2. **Local Installation** - Command-line tool
+
+### Direct Local Installation
+
+For local installation only:
+
+```bash
+cd local
+./install.sh
+```
+
+### Direct AWS Deployment
+
+For AWS deployment only (skip the menu):
+
+```bash
+# Set deployment to AWS mode
+STACK_NAME="costreports360"
+REGION="${AWS_REGION:-ap-south-1}"
+./deploy.sh <<< "1"
+```
+
+## Local Usage (Linux/WSL)
+
+After local installation:
+
+```bash
+# Basic usage
+./local/costreport --client "Client Name" --months 2024-10 2024-11 2024-12
+
+# With specific AWS profile
+./local/costreport --profile production --client "Client A" --months 2024-09 2024-10
+
+# Save to specific directory
+./local/costreport --client "Client B" --months 2024-11 2024-12 --output /path/to/reports
+
+# Show help
+./local/costreport --help
+```
+
+### Local CLI Options
+
+| Option | Description |
+|--------|-------------|
+| `--client, -c` | Client name (used in report filename) |
+| `--months, -m` | Months to compare (2-6, format: YYYY-MM) |
+| `--profile, -p` | AWS CLI profile to use |
+| `--region, -r` | AWS region (default: us-east-1) |
+| `--output, -o` | Output directory (default: current directory) |
+
+## AWS Cloud Architecture
 
 - **Frontend**: Static HTML/JS hosted on S3
 - **Backend**: Lambda function with Cost Explorer integration
 - **API**: API Gateway HTTP API
 - **Output**: Excel (.xlsx) files with formatted cost comparisons
 
-## Deployment
-
-### Prerequisites
-
-- AWS CLI configured
-- Permissions to create CloudFormation stacks, Lambda, S3, API Gateway, IAM roles
-
-### Deploy Main Stack
-
-```bash
-cd aws-cost-report
-./deploy.sh
-```
-
-This will:
-1. Create S3 bucket for frontend
-2. Deploy Lambda function
-3. Create API Gateway
-4. Upload frontend to S3
-
-### For Cross-Account Access
+### For Cross-Account Access (AWS Cloud only)
 
 Deploy the read-only role in target accounts:
 
@@ -52,7 +132,7 @@ aws cloudformation deploy \
     --region us-east-1
 ```
 
-## Usage
+## AWS Cloud Usage
 
 1. Open the frontend URL (from deployment output)
 2. Select 2-6 months to compare
@@ -74,22 +154,39 @@ Headers are yellow with bold text, matching the reference format.
 
 ## IAM Permissions
 
-### Lambda Execution Role
+### For Local Installation
+- `ce:GetCostAndUsage`
+- `ce:GetCostForecast`
+
+### Lambda Execution Role (AWS Cloud)
 - `ce:GetCostAndUsage`
 - `ce:GetCostForecast`
 - `sts:AssumeRole` (for cross-account)
 
-### Target Account Role (Optional)
+### Target Account Role (AWS Cloud, Optional)
 - `ce:GetCostAndUsage` (read-only)
 
 ## Cost Considerations
 
+### Local Installation
+- **Free** - No AWS infrastructure costs
+- Cost Explorer API: First 1000 requests free, then $0.01 per request
+
+### AWS Cloud Deployment
 - Lambda: ~$0.20 per 1000 requests
 - API Gateway: ~$1 per million requests
 - S3: Minimal (static hosting)
 - Cost Explorer API: First 1000 requests free, then $0.01 per request
 
 ## Troubleshooting
+
+### Local Installation
+
+- **"Authentication failed"**: Run `aws configure` to set up credentials
+- **"Cost Explorer not enabled"**: Enable Cost Explorer in AWS Console (Billing → Cost Explorer)
+- **"Access Denied"**: Ensure IAM user/role has `ce:GetCostAndUsage` permission
+
+### AWS Cloud Deployment
 
 - **CORS errors**: Check API Gateway CORS configuration
 - **Authentication errors**: Verify IAM role trust relationships
