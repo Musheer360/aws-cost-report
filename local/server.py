@@ -1,208 +1,237 @@
+#!/usr/bin/env python3
+"""
+CostReports360 - Local Web Server
+Flask-based backend server that mirrors the AWS Lambda functionality.
+Runs on localhost:5000 by default.
+"""
+
 import json
 import boto3
 import os
+import sys
 from datetime import datetime
+from flask import Flask, request, jsonify, send_from_directory
+from flask_cors import CORS
 from openpyxl import Workbook
 from openpyxl.styles import PatternFill, Font, Border, Side, Alignment
 import base64
 from io import BytesIO
 
-def lambda_handler(event, context):
-    # Get allowed origin from environment variable
-    allowed_origin = os.environ.get('ALLOWED_ORIGIN', '*')
+# Get the directory where server.py is located
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+WEB_DIR = os.path.join(SCRIPT_DIR, 'web')
+
+app = Flask(__name__, static_folder=WEB_DIR)
+CORS(app)
+
+# Cost change thresholds (as percentages)
+MINIMAL_CHANGE_THRESHOLD = 5
+HIGH_CHANGE_THRESHOLD = 20
+MIN_SIGNIFICANT_COST = 0.01
+
+
+@app.route('/')
+def serve_frontend():
+    """Serve the main frontend page."""
+    return send_from_directory(WEB_DIR, 'index.html')
+
+
+@app.route('/<path:filename>')
+def serve_static(filename):
+    """Serve static files from web directory."""
+    return send_from_directory(WEB_DIR, filename)
+
+
+@app.route('/api/generate', methods=['POST', 'OPTIONS'])
+def generate_report():
+    """Generate cost report - uses credentials provided in request body only."""
+    if request.method == 'OPTIONS':
+        return '', 200
     
-    # Handle CORS preflight
-    if event.get('requestContext', {}).get('http', {}).get('method') == 'OPTIONS':
-        return {
-            'statusCode': 200,
-            'headers': {
-                'Access-Control-Allow-Origin': allowed_origin,
-                'Access-Control-Allow-Headers': 'Content-Type',
-                'Access-Control-Allow-Methods': 'POST, OPTIONS'
-            },
-            'body': ''
-        }
-    
-    body = json.loads(event['body'])
-    months = body['months']  # Format: ['2025-09', '2025-10']
-    client_name = body.get('clientName', 'Client')
-    
-    # Support both auth methods
-    if 'roleArn' in body:
-        # Role-based auth
-        sts = boto3.client('sts')
-        role_arn = body['roleArn']
-        assumed_role = sts.assume_role(
-            RoleArn=role_arn,
-            RoleSessionName='CostReports360Session'
-        )
+    try:
+        body = request.get_json()
+        if not body:
+            return jsonify({'message': 'Request body is required'}), 400
+        
+        # Validate required fields
+        if 'months' not in body or not isinstance(body['months'], list):
+            return jsonify({'message': 'months is required and must be a list'}), 400
+        
+        months = body['months']
+        if len(months) < 2 or len(months) > 6:
+            return jsonify({'message': 'Please select 2-6 months'}), 400
+        
+        # Validate month format
+        for month in months:
+            try:
+                datetime.strptime(month, "%Y-%m")
+            except ValueError:
+                return jsonify({'message': f'Invalid month format: {month}. Use YYYY-MM format.'}), 400
+        
+        client_name = body.get('clientName', 'Client')
+        
+        # Require credentials from request body - no CLI or role-based auth
+        if 'accessKeyId' not in body or 'secretAccessKey' not in body:
+            return jsonify({'message': 'AWS credentials (accessKeyId and secretAccessKey) are required'}), 400
+        
+        if not body['accessKeyId'].strip() or not body['secretAccessKey'].strip():
+            return jsonify({'message': 'AWS credentials cannot be empty'}), 400
+        
+        # Create AWS session using provided credentials
+        # Cost Explorer API is global; us-east-1 is the recommended endpoint
         session = boto3.Session(
-            aws_access_key_id=assumed_role['Credentials']['AccessKeyId'],
-            aws_secret_access_key=assumed_role['Credentials']['SecretAccessKey'],
-            aws_session_token=assumed_role['Credentials']['SessionToken'],
+            aws_access_key_id=body['accessKeyId'].strip(),
+            aws_secret_access_key=body['secretAccessKey'].strip(),
             region_name='us-east-1'
         )
-    else:
-        # Credentials auth
-        session = boto3.Session(
-            aws_access_key_id=body['accessKeyId'],
-            aws_secret_access_key=body['secretAccessKey'],
-            region_name=body.get('region', 'us-east-1')
-        )
-    
-    ce = session.client('ce')
-    
-    # Sort months chronologically (oldest first)
-    months = sorted(months)
-    
-    # Convert to month names
-    month_names = []
-    month_names_short = []
-    for month in months:
-        dt = datetime.strptime(month, "%Y-%m")
-        month_names.append(dt.strftime("%B %Y"))
-        month_names_short.append(dt.strftime("%B"))  # For filename
-    
-    # Fetch detailed cost data
-    service_costs = {}
-    regional_costs = {}
-    
-    for month in months:
-        start = f"{month}-01"
-        end_date = datetime.strptime(start, "%Y-%m-%d")
-        if end_date.month == 12:
-            end = f"{end_date.year + 1}-01-01"
-        else:
-            end = f"{end_date.year}-{str(end_date.month + 1).zfill(2)}-01"
         
-        # Get detailed usage data
-        response = ce.get_cost_and_usage(
-            TimePeriod={'Start': start, 'End': end},
-            Granularity='MONTHLY',
-            Metrics=['NetUnblendedCost', 'UsageQuantity'],
-            GroupBy=[
-                {'Type': 'DIMENSION', 'Key': 'SERVICE'},
-                {'Type': 'DIMENSION', 'Key': 'USAGE_TYPE'}
-            ],
-            Filter={'Not': {'Dimensions': {'Key': 'RECORD_TYPE', 'Values': ['Tax']}}}
-        )
+        ce = session.client('ce')
         
-        for result in response['ResultsByTime'][0]['Groups']:
-            service = result['Keys'][0]
-            usage_type = result['Keys'][1]
-            cost = float(result['Metrics']['NetUnblendedCost']['Amount'])
-            usage = float(result['Metrics']['UsageQuantity']['Amount'])
-            
-            if cost > 0:
-                if service not in service_costs:
-                    service_costs[service] = {}
-                if month not in service_costs[service]:
-                    service_costs[service][month] = {'total': 0, 'details': []}
-                
-                service_costs[service][month]['total'] += cost
-                service_costs[service][month]['details'].append({
-                    'usage_type': usage_type,
-                    'cost': cost,
-                    'usage': usage
-                })
+        # Sort months chronologically (oldest first)
+        months = sorted(months)
         
-        # Get regional costs
-        regional_response = ce.get_cost_and_usage(
-            TimePeriod={'Start': start, 'End': end},
-            Granularity='MONTHLY',
-            Metrics=['NetUnblendedCost'],
-            GroupBy=[{'Type': 'DIMENSION', 'Key': 'REGION'}],
-            Filter={'Not': {'Dimensions': {'Key': 'RECORD_TYPE', 'Values': ['Tax']}}}
-        )
+        # Convert to month names
+        month_names = []
+        month_names_short = []
+        for month in months:
+            dt = datetime.strptime(month, "%Y-%m")
+            month_names.append(dt.strftime("%B %Y"))
+            month_names_short.append(dt.strftime("%B"))
         
-        for result in regional_response['ResultsByTime'][0]['Groups']:
-            region = result['Keys'][0]
-            cost = float(result['Metrics']['NetUnblendedCost']['Amount'])
-            
-            if cost > 0:
-                if region not in regional_costs:
-                    regional_costs[region] = {}
-                regional_costs[region][month] = cost
-    
-    # Sort services by total cost (highest first)
-    sorted_services = sorted(
-        service_costs.items(),
-        key=lambda x: sum(x[1].get(m, {}).get('total', 0) for m in months),
-        reverse=True
-    )
-    
-    # Categorize services by cost change
-    increased_services = []
-    decreased_services = []
-    same_services = []
-    
-    for service, data in sorted_services:
-        month_costs = [data.get(m, {}).get('total', 0) for m in months]
-        if len(month_costs) >= 2:
-            change = month_costs[-1] - month_costs[0]
-            pct = (change / month_costs[0] * 100) if month_costs[0] > 0 else 0
-            
-            if abs(pct) < 5:
-                same_services.append((service, data))
-            elif change > 0:
-                increased_services.append((service, data))
+        # Fetch detailed cost data
+        service_costs = {}
+        regional_costs = {}
+        
+        for month in months:
+            start = f"{month}-01"
+            end_date = datetime.strptime(start, "%Y-%m-%d")
+            if end_date.month == 12:
+                end = f"{end_date.year + 1}-01-01"
             else:
-                decreased_services.append((service, data))
-        else:
-            same_services.append((service, data))
-    
-    # Generate Excel
-    wb = Workbook()
-    
-    # Sheet 1: Complete Service Costs
-    ws1 = wb.active
-    ws1.title = "Complete Service Costs"
-    create_service_sheet(ws1, sorted_services, months, month_names)
-    
-    # Sheet 2: Increased Service Costs
-    ws2 = wb.create_sheet("Increased Service Costs")
-    create_service_sheet(ws2, increased_services, months, month_names)
-    
-    # Sheet 3: Decreased Service Costs
-    ws3 = wb.create_sheet("Decreased Service Costs")
-    create_service_sheet(ws3, decreased_services, months, month_names)
-    
-    # Sheet 4: Same Service Costs
-    ws4 = wb.create_sheet("Same Service Costs")
-    create_service_sheet(ws4, same_services, months, month_names)
-    
-    # Sheet 5: Regional Costs
-    ws5 = wb.create_sheet("Per-region Costs")
-    create_regional_sheet(ws5, regional_costs, months, month_names)
-    
-    # Save to bytes
-    buffer = BytesIO()
-    wb.save(buffer)
-    buffer.seek(0)
-    
-    # Format filename: ClientName-Month1-Month2-CostReport.xlsx
-    client_name_formatted = client_name.replace(' ', '-')
-    months_str = '-'.join(month_names_short)
-    filename = f"{client_name_formatted}-{months_str}-CostReport.xlsx"
-    
-    # Get allowed origin from environment variable
-    allowed_origin = os.environ.get('ALLOWED_ORIGIN', '*')
-    
-    return {
-        'statusCode': 200,
-        'headers': {
-            'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': allowed_origin,
-            'Access-Control-Allow-Headers': 'Content-Type',
-            'Access-Control-Allow-Methods': 'POST, OPTIONS'
-        },
-        'body': json.dumps({
-            'file': base64.b64encode(buffer.read()).decode('utf-8'),
+                end = f"{end_date.year}-{str(end_date.month + 1).zfill(2)}-01"
+            
+            # Get detailed usage data
+            response = ce.get_cost_and_usage(
+                TimePeriod={'Start': start, 'End': end},
+                Granularity='MONTHLY',
+                Metrics=['NetUnblendedCost', 'UsageQuantity'],
+                GroupBy=[
+                    {'Type': 'DIMENSION', 'Key': 'SERVICE'},
+                    {'Type': 'DIMENSION', 'Key': 'USAGE_TYPE'}
+                ],
+                Filter={'Not': {'Dimensions': {'Key': 'RECORD_TYPE', 'Values': ['Tax']}}}
+            )
+            
+            for result in response['ResultsByTime'][0]['Groups']:
+                service = result['Keys'][0]
+                usage_type = result['Keys'][1]
+                cost = float(result['Metrics']['NetUnblendedCost']['Amount'])
+                usage = float(result['Metrics']['UsageQuantity']['Amount'])
+                
+                if cost > 0:
+                    if service not in service_costs:
+                        service_costs[service] = {}
+                    if month not in service_costs[service]:
+                        service_costs[service][month] = {'total': 0, 'details': []}
+                    
+                    service_costs[service][month]['total'] += cost
+                    service_costs[service][month]['details'].append({
+                        'usage_type': usage_type,
+                        'cost': cost,
+                        'usage': usage
+                    })
+            
+            # Get regional costs
+            regional_response = ce.get_cost_and_usage(
+                TimePeriod={'Start': start, 'End': end},
+                Granularity='MONTHLY',
+                Metrics=['NetUnblendedCost'],
+                GroupBy=[{'Type': 'DIMENSION', 'Key': 'REGION'}],
+                Filter={'Not': {'Dimensions': {'Key': 'RECORD_TYPE', 'Values': ['Tax']}}}
+            )
+            
+            for result in regional_response['ResultsByTime'][0]['Groups']:
+                region = result['Keys'][0]
+                cost = float(result['Metrics']['NetUnblendedCost']['Amount'])
+                
+                if cost > 0:
+                    if region not in regional_costs:
+                        regional_costs[region] = {}
+                    regional_costs[region][month] = cost
+        
+        # Sort services by total cost (highest first)
+        sorted_services = sorted(
+            service_costs.items(),
+            key=lambda x: sum(x[1].get(m, {}).get('total', 0) for m in months),
+            reverse=True
+        )
+        
+        # Categorize services by cost change
+        increased_services = []
+        decreased_services = []
+        same_services = []
+        
+        for service, data in sorted_services:
+            month_costs = [data.get(m, {}).get('total', 0) for m in months]
+            if len(month_costs) >= 2:
+                change = month_costs[-1] - month_costs[0]
+                pct = (change / month_costs[0] * 100) if month_costs[0] > 0 else 0
+                
+                if abs(pct) < MINIMAL_CHANGE_THRESHOLD:
+                    same_services.append((service, data))
+                elif change > 0:
+                    increased_services.append((service, data))
+                else:
+                    decreased_services.append((service, data))
+            else:
+                same_services.append((service, data))
+        
+        # Generate Excel
+        wb = Workbook()
+        
+        # Sheet 1: Complete Service Costs
+        ws1 = wb.active
+        ws1.title = "Complete Service Costs"
+        create_service_sheet(ws1, sorted_services, months, month_names)
+        
+        # Sheet 2: Increased Service Costs
+        ws2 = wb.create_sheet("Increased Service Costs")
+        create_service_sheet(ws2, increased_services, months, month_names)
+        
+        # Sheet 3: Decreased Service Costs
+        ws3 = wb.create_sheet("Decreased Service Costs")
+        create_service_sheet(ws3, decreased_services, months, month_names)
+        
+        # Sheet 4: Same Service Costs
+        ws4 = wb.create_sheet("Same Service Costs")
+        create_service_sheet(ws4, same_services, months, month_names)
+        
+        # Sheet 5: Regional Costs
+        ws5 = wb.create_sheet("Per-region Costs")
+        create_regional_sheet(ws5, regional_costs, months, month_names)
+        
+        # Save to bytes
+        buffer = BytesIO()
+        wb.save(buffer)
+        buffer.seek(0)
+        file_content = buffer.read()
+        
+        # Format filename
+        client_name_formatted = client_name.replace(' ', '-')
+        months_str = '-'.join(month_names_short)
+        filename = f"{client_name_formatted}-{months_str}-CostReport.xlsx"
+        
+        return jsonify({
+            'file': base64.b64encode(file_content).decode('utf-8'),
             'filename': filename
         })
-    }
+    
+    except Exception as e:
+        return jsonify({'message': str(e)}), 500
+
 
 def create_service_sheet(ws, sorted_services, months, month_names):
+    """Create a service costs sheet."""
     # Styles
     yellow_fill = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
     blue_fill = PatternFill(start_color="ADD8E6", end_color="ADD8E6", fill_type="solid")
@@ -223,7 +252,6 @@ def create_service_sheet(ws, sorted_services, months, month_names):
         cell.border = border
         cell.alignment = Alignment(horizontal='center', vertical='center')
     
-    # Set header row height
     ws.row_dimensions[1].height = 40
     
     # Data rows
@@ -241,46 +269,43 @@ def create_service_sheet(ws, sorted_services, months, month_names):
             cost = data.get(month, {}).get('total', 0)
             month_costs.append(cost)
             month_totals[col - 2] += cost
-            cell = ws.cell(row, col, round(cost, 2))  # Round to 2 decimals for display
+            cell = ws.cell(row, col, round(cost, 2))
             cell.border = border
             cell.alignment = Alignment(horizontal='center', vertical='center')
         
         total = sum(month_costs)
-        cell = ws.cell(row, len(months) + 2, round(total, 2))  # Round to 2 decimals
+        cell = ws.cell(row, len(months) + 2, round(total, 2))
         cell.border = border
         cell.alignment = Alignment(horizontal='center', vertical='center')
         
-        # Generate detailed comparison
         comparison = generate_detailed_comparison(month_names, data, months)
         cell = ws.cell(row, len(months) + 3, comparison)
         cell.border = border
         cell.alignment = Alignment(horizontal='left', vertical='center', wrap_text=True)
-        cell.font = Font(size=10)  # Slightly smaller font for readability
+        cell.font = Font(size=10)
         
-        # Generate reason
         reason = generate_detailed_reason(month_names, data, month_costs, months)
         cell = ws.cell(row, len(months) + 4, reason)
         cell.border = border
         cell.alignment = Alignment(horizontal='left', vertical='center', wrap_text=True)
         
-        # Color coding entire row
+        # Color coding
         if len(month_costs) >= 2:
             change = month_costs[-1] - month_costs[0]
             pct = (change / month_costs[0] * 100) if month_costs[0] > 0 else 0
             
-            if abs(pct) < 5:
+            if abs(pct) < MINIMAL_CHANGE_THRESHOLD:
                 fill = blue_fill
             elif change > 0:
-                fill = dark_red if pct > 20 else light_red
+                fill = dark_red if pct > HIGH_CHANGE_THRESHOLD else light_red
             else:
                 fill = light_green
             
             for col in range(1, len(months) + 5):
                 ws.cell(row, col).fill = fill
         
-        # Calculate row height based on comparison text with 20px buffer
         num_lines = comparison.count('\n') + 1
-        ws.row_dimensions[row].height = (num_lines * 15) + 20  # 15 points per line + 20px buffer
+        ws.row_dimensions[row].height = (num_lines * 15) + 20
         
         row += 1
     
@@ -293,20 +318,19 @@ def create_service_sheet(ws, sorted_services, months, month_names):
     
     grand_total = 0.0
     for col, total in enumerate(month_totals, 2):
-        cell = ws.cell(row, col, round(total, 2))  # Round to 2 decimals
+        cell = ws.cell(row, col, round(total, 2))
         cell.font = Font(bold=True)
         cell.border = border
         cell.fill = yellow_fill
         cell.alignment = Alignment(horizontal='center', vertical='center')
         grand_total += total
     
-    cell = ws.cell(row, len(months) + 2, round(grand_total, 2))  # Round to 2 decimals
+    cell = ws.cell(row, len(months) + 2, round(grand_total, 2))
     cell.font = Font(bold=True)
     cell.border = border
     cell.fill = yellow_fill
     cell.alignment = Alignment(horizontal='center', vertical='center')
     
-    # Total comparison and reason - LEFT ALIGNED
     total_comparison = generate_total_comparison(month_names, month_totals)
     cell = ws.cell(row, len(months) + 3, total_comparison)
     cell.border = border
@@ -321,7 +345,6 @@ def create_service_sheet(ws, sorted_services, months, month_names):
     cell.fill = yellow_fill
     cell.alignment = Alignment(horizontal='left', vertical='center', wrap_text=True)
     
-    # Apply 20px buffer to total row
     num_lines = total_comparison.count('\n') + 1
     ws.row_dimensions[row].height = (num_lines * 15) + 20
     
@@ -332,7 +355,9 @@ def create_service_sheet(ws, sorted_services, months, month_names):
     ws.column_dimensions[chr(64 + len(months) + 3)].width = 50
     ws.column_dimensions[chr(64 + len(months) + 4)].width = 65
 
+
 def create_regional_sheet(ws, regional_costs, months, month_names):
+    """Create regional costs sheet."""
     # Styles
     yellow_fill = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
     green_fill = PatternFill(start_color="90EE90", end_color="90EE90", fill_type="solid")
@@ -350,17 +375,14 @@ def create_regional_sheet(ws, regional_costs, months, month_names):
         cell.border = border
         cell.alignment = Alignment(horizontal='center', vertical='center')
     
-    # Set header row height
     ws.row_dimensions[1].height = 40
     
-    # Sort regions by total cost
     sorted_regions = sorted(
         regional_costs.items(),
         key=lambda x: sum(x[1].values()),
         reverse=True
     )
     
-    # Data rows
     row = 2
     month_totals = [0.0] * len(months)
     
@@ -376,12 +398,12 @@ def create_regional_sheet(ws, regional_costs, months, month_names):
         for col, month in enumerate(months, 2):
             cost = costs.get(month, 0)
             month_totals[col - 2] += cost
-            cell = ws.cell(row, col, round(cost, 2))  # Round to 2 decimals
+            cell = ws.cell(row, col, round(cost, 2))
             cell.border = border
             cell.alignment = Alignment(horizontal='center', vertical='center')
             cell.fill = green_fill
         
-        cell = ws.cell(row, len(months) + 2, round(region_total, 2))  # Round to 2 decimals
+        cell = ws.cell(row, len(months) + 2, round(region_total, 2))
         cell.border = border
         cell.alignment = Alignment(horizontal='center', vertical='center')
         cell.fill = green_fill
@@ -397,14 +419,14 @@ def create_regional_sheet(ws, regional_costs, months, month_names):
     
     grand_total = 0.0
     for col, total in enumerate(month_totals, 2):
-        cell = ws.cell(row, col, round(total, 2))  # Round to 2 decimals
+        cell = ws.cell(row, col, round(total, 2))
         cell.font = Font(bold=True)
         cell.border = border
         cell.fill = yellow_fill
         cell.alignment = Alignment(horizontal='center', vertical='center')
         grand_total += total
     
-    cell = ws.cell(row, len(months) + 2, round(grand_total, 2))  # Round to 2 decimals
+    cell = ws.cell(row, len(months) + 2, round(grand_total, 2))
     cell.font = Font(bold=True)
     cell.border = border
     cell.fill = yellow_fill
@@ -415,9 +437,9 @@ def create_regional_sheet(ws, regional_costs, months, month_names):
     for col in range(2, len(months) + 3):
         ws.column_dimensions[chr(64 + col)].width = 15
 
+
 def format_compute_usage(usage_type, cost, usage):
-    """Format compute instance usage with hourly rates"""
-    # Patterns for hourly compute resources
+    """Format compute instance usage with hourly rates."""
     compute_patterns = [
         ('BoxUsage:', 'EC2'),
         ('HeavyUsage:', 'EC2 Reserved'),
@@ -431,20 +453,18 @@ def format_compute_usage(usage_type, cost, usage):
     
     for pattern, service_type in compute_patterns:
         if pattern in usage_type:
-            # Extract instance type
             instance_type = usage_type.split(pattern)[1].split(':')[0]
-            
-            # Calculate hourly rate
             if usage > 0:
                 hourly_rate = cost / usage
                 return f"{instance_type} ({usage:,.3f} Hrs @ ${hourly_rate:.4f}): ${cost:,.2f}"
             else:
                 return f"{instance_type}: ${cost:,.2f}"
     
-    # Not a compute instance, return standard format
     return None
 
+
 def generate_detailed_comparison(month_names, data, months):
+    """Generate detailed comparison text for a service."""
     lines = []
     
     for i, month in enumerate(months):
@@ -455,13 +475,11 @@ def generate_detailed_comparison(month_names, data, months):
             
             sorted_details = sorted(month_data['details'], key=lambda x: x['cost'], reverse=True)[:5]
             for detail in sorted_details:
-                # Try to format as compute instance
                 formatted = format_compute_usage(detail['usage_type'], detail['cost'], detail['usage'])
                 
                 if formatted:
                     lines.append(formatted)
                 else:
-                    # Standard format for non-compute resources
                     lines.append(f"{detail['usage_type']}: USD {detail['cost']:,.2f}")
                     if detail['usage'] > 0:
                         lines.append(f"Usage: {detail['usage']:,.3f} units")
@@ -475,7 +493,9 @@ def generate_detailed_comparison(month_names, data, months):
     
     return '\n'.join(lines)
 
+
 def generate_total_comparison(month_names, totals):
+    """Generate total comparison text."""
     lines = []
     for i, name in enumerate(month_names):
         lines.append(f"{name} Total: USD {totals[i]:,.2f}")
@@ -486,7 +506,9 @@ def generate_total_comparison(month_names, totals):
     
     return '\n'.join(lines)
 
+
 def generate_detailed_reason(month_names, data, month_costs, months):
+    """Generate detailed reason for cost changes."""
     if len(month_costs) < 2:
         return "Insufficient data"
     
@@ -504,7 +526,7 @@ def generate_detailed_reason(month_names, data, month_costs, months):
     
     pct = (change / first_cost * 100) if first_cost > 0 else 0
     
-    if abs(pct) < 5:
+    if abs(pct) < MINIMAL_CHANGE_THRESHOLD:
         return "Minimal Cost Difference"
     
     first_month = months[0]
@@ -525,7 +547,7 @@ def generate_detailed_reason(month_names, data, month_costs, months):
     
     lines = [f"Cost {'increased' if change > 0 else 'decreased'} by USD {abs(change):,.2f} ({abs(pct):.1f}%)"]
     
-    significant_changes = [c for c in changes[:3] if abs(c[1]) > 0.01]
+    significant_changes = [c for c in changes[:3] if abs(c[1]) > MIN_SIGNIFICANT_COST]
     if significant_changes:
         lines.append("\nTop changes:")
         for usage_type, diff, first, last in significant_changes:
@@ -533,7 +555,9 @@ def generate_detailed_reason(month_names, data, month_costs, months):
     
     return '\n'.join(lines)
 
+
 def generate_simple_reason(costs):
+    """Generate simple reason for cost changes."""
     if len(costs) < 2:
         return "Insufficient data"
     
@@ -551,9 +575,23 @@ def generate_simple_reason(costs):
     
     pct = (change / first_cost * 100) if first_cost > 0 else 0
     
-    if abs(pct) < 5:
+    if abs(pct) < MINIMAL_CHANGE_THRESHOLD:
         return "Minimal Cost Difference"
     elif change > 0:
         return f"Cost increased by USD {abs(change):,.2f} ({abs(pct):.1f}% increase)"
     else:
         return f"Cost decreased by USD {abs(change):,.2f} ({abs(pct):.1f}% decrease)"
+
+
+if __name__ == '__main__':
+    port = int(os.environ.get('PORT', 5000))
+    # Default to localhost only for security (handles AWS credentials)
+    host = os.environ.get('HOST', '127.0.0.1')
+    print(f"\n{'='*60}")
+    print("CostReports360 - Local Web Server")
+    print(f"{'='*60}")
+    print(f"\n✓ Server starting on http://localhost:{port}")
+    print(f"✓ Frontend available at http://localhost:{port}")
+    print(f"✓ API endpoint: http://localhost:{port}/api/generate")
+    print("\nPress Ctrl+C to stop the server\n")
+    app.run(host=host, port=port, debug=False)

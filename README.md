@@ -6,12 +6,14 @@ Web application to generate Excel cost comparison reports for AWS accounts.
 
 - Compare 2-6 months of AWS costs
 - Excel reports with color-coded headers and detailed breakdowns
-- Two deployment modes:
+- Three deployment modes:
   - **AWS Cloud**: Full-featured web application with Lambda, API Gateway, S3
-  - **Local (Linux/WSL)**: Command-line tool using AWS CLI credentials
-- Two authentication methods (AWS Cloud mode):
+  - **Local Web Server**: Full web interface running on localhost:5000
+  - **Local CLI**: Command-line tool using AWS CLI credentials
+- Three authentication methods:
   - IAM Role (for cross-account access)
   - AWS Credentials (direct access)
+  - AWS CLI credentials (local modes)
 - Excludes tax from cost calculations
 - Uses AWS Cost Explorer API
 
@@ -31,24 +33,35 @@ Full-featured web application hosted on AWS.
 - AWS CLI configured with admin permissions
 - Ability to create CloudFormation stacks, Lambda, S3, API Gateway, IAM roles
 
-### Option 2: Local Installation (Linux/WSL)
+### Option 2: Local Web Server (Recommended for Local Use)
+
+Full web interface running locally on your Linux machine.
+
+**Features:**
+- Same web UI as AWS Cloud deployment
+- Runs on http://localhost:5000
+- Start/stop with simple commands
+- Auto-start on system boot
+- Enter AWS credentials directly in the web form
+
+**Requirements:**
+- Python 3.8+
+- AWS credentials with IAM permissions: `ce:GetCostAndUsage`, `ce:GetCostForecast`
+
+### Option 3: Local CLI Only
 
 Command-line tool that runs locally on your machine.
 
 **Features:**
-- No AWS infrastructure required
+- No web interface
 - Uses AWS CLI credentials
-- Generates same Excel reports as cloud version
+- Generates same Excel reports as other modes
 - Works on any Linux system or WSL
 
 **Requirements:**
 - Python 3.8+
 - AWS CLI configured with valid credentials
 - IAM permissions: `ce:GetCostAndUsage`, `ce:GetCostForecast`
-
-**Limitations:**
-- No cross-account IAM role support (only AWS CLI credentials)
-- Command-line interface only (no web UI)
 
 ## Quick Start
 
@@ -61,8 +74,8 @@ Run the deploy script and choose your deployment mode:
 ```
 
 The installer will prompt you to choose:
-1. **AWS Cloud Deployment** - Full web application
-2. **Local Installation** - Command-line tool
+1. **AWS Cloud Deployment** - Full web application on AWS
+2. **Local Installation** - Web server or CLI on your machine
 
 ### Direct Local Installation
 
@@ -72,6 +85,10 @@ For local installation only:
 cd local
 ./install.sh
 ```
+
+The installer will ask if you want:
+1. **Web Server Mode** - Full web interface on localhost:5000
+2. **CLI Only Mode** - Command-line tool only
 
 ### Direct AWS Deployment
 
@@ -84,7 +101,48 @@ REGION="${AWS_REGION:-ap-south-1}"
 ./deploy.sh <<< "1"
 ```
 
-## Local Usage (Linux/WSL)
+## Local Web Server Usage
+
+### Starting the Server
+
+```bash
+# Start the web server (runs in background, auto-starts on boot)
+./local/serve-costapp
+```
+
+This will:
+- Start the server on http://localhost:5000
+- Run in the background
+- Configure auto-start on system boot (via systemd)
+
+### Stopping the Server
+
+```bash
+# Stop the web server and disable auto-start
+./local/stop-costapp
+```
+
+This will:
+- Stop the running server
+- Disable auto-start on boot
+- Clean up log files
+
+### Server Management
+
+| Command | Description |
+|---------|-------------|
+| `./local/serve-costapp` | Start server, enable auto-start |
+| `./local/stop-costapp` | Stop server, disable auto-start |
+
+### Web Interface
+
+Once started, access the web interface at:
+- **Frontend**: http://localhost:5000
+- **API**: http://localhost:5000/api/generate
+
+Enter your AWS credentials directly in the web form to generate reports. Credentials are used only for the request and are not stored.
+
+## Local CLI Usage (Linux/WSL)
 
 After local installation:
 
@@ -180,7 +238,13 @@ Headers are yellow with bold text, matching the reference format.
 
 ## Troubleshooting
 
-### Local Installation
+### Local Web Server
+
+- **"Server already running"**: Run `./local/stop-costapp` first, then start again
+- **"Port 5000 in use"**: Set a different port: `PORT=8080 ./local/serve-costapp`
+- **"systemd not available"**: Auto-start won't work, but server will still run
+
+### Local CLI
 
 - **"Authentication failed"**: Run `aws configure` to set up credentials
 - **"Cost Explorer not enabled"**: Enable Cost Explorer in AWS Console (Billing → Cost Explorer)

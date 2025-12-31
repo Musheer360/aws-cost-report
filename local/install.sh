@@ -56,6 +56,22 @@ fi
 # Get script directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+# Ask for installation mode
+echo ""
+echo "Choose installation mode:"
+echo ""
+echo "  1) Web Server Mode (Recommended)"
+echo "     - Full web interface like AWS deployment"
+echo "     - Runs on http://localhost:5000"
+echo "     - Start/Stop with simple commands"
+echo "     - Auto-start on boot"
+echo ""
+echo "  2) CLI Only Mode"
+echo "     - Command-line tool only"
+echo "     - No web interface"
+echo ""
+read -p "Select mode (1 or 2): " INSTALL_MODE
+
 # Create virtual environment (optional but recommended)
 echo ""
 read -p "Create a virtual environment? (recommended) (y/n): " create_venv
@@ -93,10 +109,13 @@ echo "▶ Installing Python dependencies..."
 $PIP_CMD install -r "$SCRIPT_DIR/requirements.txt" -q
 echo "✓ Dependencies installed"
 
-# Make CLI script executable
+# Make scripts executable
 chmod +x "$SCRIPT_DIR/cost_report_cli.py"
+chmod +x "$SCRIPT_DIR/server.py"
+chmod +x "$SCRIPT_DIR/serve-costapp"
+chmod +x "$SCRIPT_DIR/stop-costapp"
 
-# Create convenience wrapper script
+# Create convenience wrapper script for CLI
 WRAPPER_SCRIPT="$SCRIPT_DIR/costreport"
 create_wrapper() {
     local use_venv=$1
@@ -118,22 +137,67 @@ else
     create_wrapper "false" "$WRAPPER_SCRIPT"
 fi
 chmod +x "$WRAPPER_SCRIPT"
-echo "✓ Created convenience wrapper: $WRAPPER_SCRIPT"
+echo "✓ Created CLI wrapper: $WRAPPER_SCRIPT"
 
-# Add to PATH suggestion
-echo ""
-echo "========================================"
-echo "✓ Installation Complete!"
-echo "========================================"
-echo ""
-echo "Usage:"
-echo "  $WRAPPER_SCRIPT --client \"Client Name\" --months 2024-10 2024-11 2024-12"
-echo ""
-echo "Or run directly:"
-if [[ "$create_venv" =~ ^[Yy]$ ]]; then
-    echo "  source $VENV_DIR/bin/activate"
-fi
-echo "  python3 $SCRIPT_DIR/cost_report_cli.py --help"
+# Handle installation mode
+case $INSTALL_MODE in
+    1)
+        # Web Server Mode
+        echo ""
+        echo "▶ Setting up Web Server Mode..."
+        
+        # Ask if user wants to start the server now
+        read -p "Start the web server now? (y/n): " start_now
+        
+        if [[ "$start_now" =~ ^[Yy]$ ]]; then
+            echo ""
+            bash "$SCRIPT_DIR/serve-costapp"
+        fi
+        
+        echo ""
+        echo "========================================"
+        echo "✓ Web Server Installation Complete!"
+        echo "========================================"
+        echo ""
+        echo "Web Server Commands:"
+        echo "  Start server:  $SCRIPT_DIR/serve-costapp"
+        echo "  Stop server:   $SCRIPT_DIR/stop-costapp"
+        echo ""
+        echo "Access the web interface at:"
+        echo "  http://localhost:5000"
+        echo ""
+        echo "CLI is also available:"
+        echo "  $WRAPPER_SCRIPT --client \"Client Name\" --months 2024-10 2024-11 2024-12"
+        ;;
+    2)
+        # CLI Only Mode
+        echo ""
+        echo "========================================"
+        echo "✓ CLI Installation Complete!"
+        echo "========================================"
+        echo ""
+        echo "Usage:"
+        echo "  $WRAPPER_SCRIPT --client \"Client Name\" --months 2024-10 2024-11 2024-12"
+        echo ""
+        echo "Or run directly:"
+        if [[ "$create_venv" =~ ^[Yy]$ ]]; then
+            echo "  source $VENV_DIR/bin/activate"
+        fi
+        echo "  python3 $SCRIPT_DIR/cost_report_cli.py --help"
+        ;;
+    *)
+        echo "Invalid option, defaulting to Web Server Mode"
+        echo ""
+        echo "========================================"
+        echo "✓ Installation Complete!"
+        echo "========================================"
+        echo ""
+        echo "Web Server Commands:"
+        echo "  Start server:  $SCRIPT_DIR/serve-costapp"
+        echo "  Stop server:   $SCRIPT_DIR/stop-costapp"
+        ;;
+esac
+
 echo ""
 echo "To add to PATH (optional):"
 echo "  echo 'export PATH=\"\$PATH:$SCRIPT_DIR\"' >> ~/.bashrc"
