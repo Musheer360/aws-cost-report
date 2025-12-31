@@ -141,7 +141,7 @@ ExecStart=$PYTHON_PATH $SCRIPT_DIR/server.py
 Restart=on-failure
 RestartSec=5
 Environment=PORT=$PORT
-Environment=HOST=0.0.0.0
+Environment=HOST=127.0.0.1
 
 [Install]
 WantedBy=default.target
