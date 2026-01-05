@@ -141,9 +141,12 @@ def lambda_handler(event, context):
     for service, data in sorted_services:
         month_costs = [data.get(m, {}).get('total', 0) for m in months]
         if len(month_costs) >= 2:
-            change = month_costs[-1] - month_costs[0]
+            # Use rounded values for categorization to match displayed values in the report
+            # This ensures services showing 0.00 → 0.00 are categorized as "same"
+            rounded_costs = [round(c, 2) for c in month_costs]
+            change = rounded_costs[-1] - rounded_costs[0]
             
-            # Categorize based on actual cost change direction
+            # Categorize based on rounded cost change direction
             # Any increase goes to increased, any decrease goes to decreased
             # Only truly unchanged (change == 0) goes to same
             if change > 0:
@@ -268,17 +271,25 @@ def create_service_sheet(ws, sorted_services, months, month_names):
         cell.alignment = Alignment(horizontal='left', vertical='center', wrap_text=True)
         
         # Color coding entire row
+        # COLOR LEGEND:
+        # - Dark Red: Cost increased by more than 20%
+        # - Light Red: Cost increased by up to 20%
+        # - Light Green: Cost decreased
+        # - Blue: Cost unchanged (same rounded values)
         if len(month_costs) >= 2:
-            change = month_costs[-1] - month_costs[0]
-            # Handle new services (first month = 0) - treat as 100% increase
-            if month_costs[0] > 0:
-                pct = (change / month_costs[0] * 100)
-            elif month_costs[-1] > 0:
+            # Use rounded values for color coding to match displayed values
+            rounded_costs = [round(c, 2) for c in month_costs]
+            change = rounded_costs[-1] - rounded_costs[0]
+            
+            # Calculate percentage for color intensity
+            if rounded_costs[0] > 0:
+                pct = (change / rounded_costs[0] * 100)
+            elif rounded_costs[-1] > 0:
                 pct = 100  # New service, treat as significant increase
             else:
                 pct = 0  # Both zero, no change
             
-            # Color based on actual change direction
+            # Color based on rounded change direction
             if change > 0:
                 fill = dark_red if pct > 20 else light_red
             elif change < 0:
