@@ -490,19 +490,8 @@ def generate_detailed_reason(month_names, data, month_costs, months):
     if len(month_costs) < 2:
         return "Insufficient data"
     
-    first_cost = month_costs[0]
-    last_cost = month_costs[-1]
-    change = last_cost - first_cost
-    
-    # Check for zero cost in both months
-    if first_cost == 0 and last_cost == 0:
-        return "Zero cost."
-    
-    # Check for exact same cost (no difference)
-    if change == 0:
-        return "No cost difference."
-    
-    pct = (change / first_cost * 100) if first_cost > 0 else 0
+    change = month_costs[-1] - month_costs[0]
+    pct = (change / month_costs[0] * 100) if month_costs[0] > 0 else 0
     
     if abs(pct) < 5:
         return "Minimal Cost Difference"
@@ -537,19 +526,8 @@ def generate_simple_reason(costs):
     if len(costs) < 2:
         return "Insufficient data"
     
-    first_cost = costs[0]
-    last_cost = costs[-1]
-    change = last_cost - first_cost
-    
-    # Check for zero cost in both months
-    if first_cost == 0 and last_cost == 0:
-        return "Zero cost."
-    
-    # Check for exact same cost (no difference)
-    if change == 0:
-        return "No cost difference."
-    
-    pct = (change / first_cost * 100) if first_cost > 0 else 0
+    change = costs[-1] - costs[0]
+    pct = (change / costs[0] * 100) if costs[0] > 0 else 0
     
     if abs(pct) < 5:
         return "Minimal Cost Difference"

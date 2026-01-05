@@ -1,144 +1,24 @@
 # AWS Cost Report Generator - Deployment Guide
 
-This guide covers both AWS Cloud deployment and Local installation options.
-
-## Table of Contents
-
-- [Prerequisites](#prerequisites)
-- [Local Installation (Linux/WSL)](#local-installation-linuxwsl)
-- [AWS Cloud Deployment](#aws-cloud-deployment)
-- [Troubleshooting](#troubleshooting)
-
----
-
 ## Prerequisites
 
-### For Local Installation
-- Python 3.8+
-- AWS CLI configured with credentials
-- IAM permissions: `ce:GetCostAndUsage`, `ce:GetCostForecast`
-
-### For AWS Cloud Deployment
-- AWS CLI configured with admin credentials
-- IAM permissions to create:
+- AWS CLI configured with appropriate credentials
+- Admin or sufficient IAM permissions to create:
   - Lambda functions
   - S3 buckets
   - API Gateway
   - IAM roles
+- Python 3.11+ (for local testing)
 
 ---
 
-## Local Installation (Linux/WSL)
-
-Local installation runs the cost report generator as a command-line tool on your machine.
-
-### Quick Install
-
-```bash
-cd aws-cost-report
-./deploy.sh
-# Select option 2 for local installation
-```
-
-Or directly:
-
-```bash
-cd aws-cost-report/local
-./install.sh
-```
-
-### What the Installer Does
-
-1. Checks for Python 3 and pip
-2. Verifies AWS CLI installation
-3. Optionally creates a Python virtual environment
-4. Installs required dependencies (boto3, openpyxl)
-5. Creates a convenience wrapper script
-
-### Usage
-
-After installation:
-
-```bash
-# Generate a cost report
-./local/costreport --client "Acme Corp" --months 2024-10 2024-11 2024-12
-
-# Use a specific AWS profile
-./local/costreport --profile production --client "Client A" --months 2024-09 2024-10
-
-# Save to a specific directory
-./local/costreport --client "Client B" --months 2024-11 2024-12 --output ~/reports
-
-# Show all options
-./local/costreport --help
-```
-
-### CLI Options
-
-| Option | Short | Required | Description |
-|--------|-------|----------|-------------|
-| `--client` | `-c` | Yes | Client name (used in filename) |
-| `--months` | `-m` | Yes | 2-6 months in YYYY-MM format |
-| `--profile` | `-p` | No | AWS CLI profile name |
-| `--region` | `-r` | No | AWS region (default: us-east-1) |
-| `--output` | `-o` | No | Output directory (default: current) |
-
-### Manual Installation
-
-If you prefer manual installation:
-
-```bash
-cd aws-cost-report/local
-
-# Create virtual environment (optional)
-python3 -m venv venv
-source venv/bin/activate
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Run directly
-python3 cost_report_cli.py --client "Test" --months 2024-11 2024-12
-```
-
-### Local Installation Limitations
-
-- **No cross-account IAM role support**: The local version can only use AWS CLI credentials configured on your machine
-- **No web interface**: Command-line only
-- **Single account access**: Can only access accounts where you have credentials configured
-
-### Required IAM Permissions
-
-The AWS user/role configured in your CLI needs these permissions:
-
-```json
-{
-  "Version": "2012-10-17",
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Action": [
-        "ce:GetCostAndUsage",
-        "ce:GetCostForecast"
-      ],
-      "Resource": "*"
-    }
-  ]
-}
-```
-
----
-
-## AWS Cloud Deployment
-
-### Option 1: Automated Deployment (Recommended)
+## Option 1: Automated Deployment (Recommended)
 
 ### Using the Deploy Script
 
 ```bash
-cd aws-cost-report
+cd /home/musheer360/aws-cost-report
 ./deploy.sh
-# Select option 1 for AWS Cloud deployment
 ```
 
 This script will:
@@ -154,7 +34,7 @@ This script will:
 
 ---
 
-### Option 2: CloudFormation Template Deployment
+## Option 2: CloudFormation Template Deployment
 
 ### Step 1: Deploy Infrastructure
 
