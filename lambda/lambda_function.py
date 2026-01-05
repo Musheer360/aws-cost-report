@@ -436,13 +436,26 @@ def is_compute_usage_type(usage_type):
             return True
     return False
 
+# Maximum number of items to show in the breakdown
+MAX_BREAKDOWN_ITEMS = 5
+
 def format_compute_usage(usage_type, cost, usage):
     """Format compute instance usage with hourly rates"""
     
     for pattern, service_type in COMPUTE_PATTERNS:
         if pattern in usage_type:
-            # Extract instance type
-            instance_type = usage_type.split(pattern)[1].split(':')[0]
+            # Extract instance type with error handling for unexpected formats
+            try:
+                parts = usage_type.split(pattern)
+                if len(parts) > 1 and parts[1]:
+                    instance_type = parts[1].split(':')[0]
+                    # If instance_type is empty after split, use full usage_type
+                    if not instance_type:
+                        instance_type = usage_type
+                else:
+                    instance_type = usage_type  # Fallback to full usage type
+            except (IndexError, AttributeError):
+                instance_type = usage_type  # Fallback to full usage type
             
             # Calculate hourly rate
             if usage > 0:
@@ -476,9 +489,9 @@ def generate_detailed_comparison(month_names, data, months):
             compute_details.sort(key=lambda x: x['usage'], reverse=True)
             other_details.sort(key=lambda x: x['cost'], reverse=True)
             
-            # Show top 5 compute resources first, then fill remaining slots with other resources
-            top_compute = compute_details[:5]
-            remaining_slots = 5 - len(top_compute)
+            # Show top compute resources first, then fill remaining slots with other resources
+            top_compute = compute_details[:MAX_BREAKDOWN_ITEMS]
+            remaining_slots = MAX_BREAKDOWN_ITEMS - len(top_compute)
             top_other = other_details[:remaining_slots] if remaining_slots > 0 else []
             
             sorted_details = top_compute + top_other
