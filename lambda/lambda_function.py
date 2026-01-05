@@ -280,8 +280,10 @@ def create_service_sheet(ws, sorted_services, months, month_names):
             for col in range(1, len(months) + 5):
                 ws.cell(row, col).fill = fill
         
-        # Calculate row height based on comparison text with 20px buffer
-        num_lines = comparison.count('\n') + 1
+        # Calculate row height based on the larger of comparison or reason text
+        comparison_lines = comparison.count('\n') + 1
+        reason_lines = reason.count('\n') + 1
+        num_lines = max(comparison_lines, reason_lines)
         ws.row_dimensions[row].height = (num_lines * 15) + 20  # 15 points per line + 20px buffer
         
         row += 1
@@ -332,7 +334,7 @@ def create_service_sheet(ws, sorted_services, months, month_names):
     for col in range(2, len(months) + 3):
         ws.column_dimensions[chr(64 + col)].width = 20
     ws.column_dimensions[chr(64 + len(months) + 3)].width = 50
-    ws.column_dimensions[chr(64 + len(months) + 4)].width = 65
+    ws.column_dimensions[chr(64 + len(months) + 4)].width = 80  # Wider for detailed reasons
 
 def create_regional_sheet(ws, regional_costs, months, month_names):
     # Styles
@@ -528,39 +530,272 @@ def generate_total_comparison(month_names, totals):
     
     return '\n'.join(lines)
 
-def generate_detailed_reason(month_names, data, month_costs, months):
-    if len(month_costs) < 2:
-        return "Insufficient data"
+def analyze_usage_patterns(data, months):
+    """Analyze usage patterns to identify insights like Savings Plans, Reserved Instances, Free Tier, etc."""
+    insights = []
     
-    change = month_costs[-1] - month_costs[0]
-    pct = (change / month_costs[0] * 100) if month_costs[0] > 0 else 0
+    # Collect all details across months
+    all_details = {}
+    for month in months:
+        month_data = data.get(month, {})
+        for detail in month_data.get('details', []):
+            usage_type = detail['usage_type']
+            if usage_type not in all_details:
+                all_details[usage_type] = []
+            all_details[usage_type].append({
+                'month': month,
+                'cost': detail['cost'],
+                'usage': detail['usage']
+            })
     
-    if abs(pct) < 5:
-        return "Minimal Cost Difference"
+    # Analyze each usage type for patterns
+    for usage_type, records in all_details.items():
+        # Check for zero-cost compute resources (Savings Plans/Reserved Instances)
+        if is_compute_usage_type(usage_type):
+            zero_cost_with_usage = [r for r in records if r['cost'] == 0 and r['usage'] > 0]
+            if zero_cost_with_usage:
+                # Determine likely coverage type
+                if 'HeavyUsage:' in usage_type:
+                    coverage = "Reserved Instance"
+                elif 'SpotUsage:' in usage_type:
+                    coverage = "Spot Instance pricing"
+                else:
+                    coverage = "Savings Plan or Reserved Instance"
+                
+                # Extract instance type
+                instance_type = usage_type
+                for pattern, _ in COMPUTE_PATTERNS:
+                    if pattern in usage_type:
+                        parts = usage_type.split(pattern)
+                        if len(parts) > 1 and parts[1]:
+                            instance_type = parts[1].split(':')[0] or usage_type
+                        break
+                
+                total_hours = sum(r['usage'] for r in zero_cost_with_usage)
+                insights.append(f"• {instance_type}: {total_hours:,.1f} hours at $0 — covered by {coverage}")
+        
+        # Check for data transfer patterns
+        if 'DataTransfer' in usage_type or 'Bytes' in usage_type:
+            costs = [r['cost'] for r in records]
+            if len(costs) >= 2 and costs[-1] > costs[0] * 1.5:
+                pct_increase = ((costs[-1] - costs[0]) / costs[0] * 100) if costs[0] > 0 else 0
+                insights.append(f"• Data transfer ({usage_type.split(':')[-1] if ':' in usage_type else usage_type}) increased by {pct_increase:.0f}%")
+        
+        # Check for NAT Gateway usage
+        if 'NatGateway' in usage_type:
+            costs = [r['cost'] for r in records]
+            if sum(costs) > 50:  # Significant NAT Gateway cost
+                insights.append(f"• NAT Gateway costs are significant — consider VPC endpoints for AWS services")
+    
+    return insights
+
+def detect_new_or_removed_services(data, months):
+    """Detect services that appeared or disappeared between months."""
+    insights = []
+    
+    if len(months) < 2:
+        return insights
     
     first_month = months[0]
     last_month = months[-1]
-    first_details = {d['usage_type']: d['cost'] for d in data.get(first_month, {}).get('details', [])}
-    last_details = {d['usage_type']: d['cost'] for d in data.get(last_month, {}).get('details', [])}
     
+    first_types = set(d['usage_type'] for d in data.get(first_month, {}).get('details', []))
+    last_types = set(d['usage_type'] for d in data.get(last_month, {}).get('details', []))
+    
+    # New usage types
+    new_types = last_types - first_types
+    significant_new = []
+    for usage_type in new_types:
+        for detail in data.get(last_month, {}).get('details', []):
+            if detail['usage_type'] == usage_type and detail['cost'] > 1:
+                significant_new.append((usage_type, detail['cost']))
+    
+    if significant_new:
+        significant_new.sort(key=lambda x: x[1], reverse=True)
+        for usage_type, cost in significant_new[:2]:
+            # Simplify usage type name
+            simple_name = usage_type.split(':')[-1] if ':' in usage_type else usage_type
+            insights.append(f"• NEW: {simple_name} added (${cost:,.2f})")
+    
+    # Removed usage types
+    removed_types = first_types - last_types
+    significant_removed = []
+    for usage_type in removed_types:
+        for detail in data.get(first_month, {}).get('details', []):
+            if detail['usage_type'] == usage_type and detail['cost'] > 1:
+                significant_removed.append((usage_type, detail['cost']))
+    
+    if significant_removed:
+        significant_removed.sort(key=lambda x: x[1], reverse=True)
+        for usage_type, cost in significant_removed[:2]:
+            simple_name = usage_type.split(':')[-1] if ':' in usage_type else usage_type
+            insights.append(f"• REMOVED: {simple_name} no longer used (was ${cost:,.2f})")
+    
+    return insights
+
+def explain_cost_pattern(usage_type, first_cost, last_cost, first_usage, last_usage):
+    """Generate a human-readable explanation for a cost change."""
+    diff = last_cost - first_cost
+    
+    # Check for Free Tier patterns
+    if 'Free' in usage_type or (first_cost == 0 and last_cost == 0):
+        return "Free tier usage"
+    
+    # Check for compute with pricing changes
+    if is_compute_usage_type(usage_type):
+        if first_usage > 0 and last_usage > 0:
+            # Both first_usage and last_usage are > 0, safe to divide
+            first_rate = first_cost / first_usage
+            last_rate = last_cost / last_usage
+            
+            if abs(first_rate - last_rate) > 0.001:
+                if last_cost == 0 and last_usage > 0:
+                    return "Now covered by Savings Plan/RI"
+                elif first_cost == 0 and first_usage > 0:
+                    return "Savings Plan/RI coverage ended"
+                elif last_rate < first_rate:
+                    return "Better pricing (Savings Plan/RI applied)"
+                else:
+                    return "Rate increased"
+            
+            usage_diff = last_usage - first_usage
+            if abs(usage_diff) > first_usage * 0.1:
+                if usage_diff > 0:
+                    return f"Usage increased ({usage_diff:,.0f} more hours)"
+                else:
+                    return f"Usage decreased ({abs(usage_diff):,.0f} fewer hours)"
+    
+    # Storage patterns
+    if 'Storage' in usage_type or 'TimedStorage' in usage_type:
+        if diff > 0:
+            return "Storage growth"
+        else:
+            return "Storage reduced or cleaned up"
+    
+    # Data transfer patterns
+    if 'DataTransfer' in usage_type or 'Bytes' in usage_type:
+        if diff > 0:
+            return "Increased data transfer"
+        else:
+            return "Reduced data transfer"
+    
+    # API/Request patterns
+    if 'Request' in usage_type or 'API' in usage_type or 'Invocation' in usage_type:
+        if diff > 0:
+            return "Higher API/request volume"
+        else:
+            return "Lower API/request volume"
+    
+    # Default explanation based on direction
+    if diff > 0:
+        return "Usage increased"
+    elif diff < 0:
+        return "Usage decreased"
+    else:
+        return "No change"
+
+def generate_detailed_reason(month_names, data, month_costs, months):
+    if len(month_costs) < 2:
+        return "Insufficient data for comparison"
+    
+    change = month_costs[-1] - month_costs[0]
+    pct = (change / month_costs[0] * 100) if month_costs[0] > 0 else (100 if month_costs[-1] > 0 else 0)
+    
+    lines = []
+    
+    # Overall change summary
+    if abs(pct) < 5:
+        lines.append("Minimal cost difference (within 5%)")
+    elif change > 0:
+        lines.append(f"Cost increased by ${abs(change):,.2f} ({abs(pct):.1f}%)")
+    else:
+        lines.append(f"Cost decreased by ${abs(change):,.2f} ({abs(pct):.1f}%)")
+    
+    # Get detailed analysis
+    first_month = months[0]
+    last_month = months[-1]
+    
+    # Create lookup for usage data
+    first_data = {d['usage_type']: d for d in data.get(first_month, {}).get('details', [])}
+    last_data = {d['usage_type']: d for d in data.get(last_month, {}).get('details', [])}
+    
+    # Analyze top changes with explanations
     changes = []
-    all_types = set(first_details.keys()) | set(last_details.keys())
+    all_types = set(first_data.keys()) | set(last_data.keys())
+    
     for usage_type in all_types:
-        first_cost = first_details.get(usage_type, 0)
-        last_cost = last_details.get(usage_type, 0)
-        if first_cost > 0 or last_cost > 0:
+        first_detail = first_data.get(usage_type, {'cost': 0, 'usage': 0})
+        last_detail = last_data.get(usage_type, {'cost': 0, 'usage': 0})
+        
+        first_cost = first_detail['cost'] if isinstance(first_detail, dict) else first_detail
+        last_cost = last_detail['cost'] if isinstance(last_detail, dict) else last_detail
+        first_usage = first_detail.get('usage', 0) if isinstance(first_detail, dict) else 0
+        last_usage = last_detail.get('usage', 0) if isinstance(last_detail, dict) else 0
+        
+        if first_cost > 0 or last_cost > 0 or (is_compute_usage_type(usage_type) and (first_usage > 0 or last_usage > 0)):
             diff = last_cost - first_cost
-            changes.append((usage_type, diff, first_cost, last_cost))
+            explanation = explain_cost_pattern(usage_type, first_cost, last_cost, first_usage, last_usage)
+            # Track if this is a Savings Plan related change for filtering
+            is_savings_plan_related = explanation and ('Savings Plan' in explanation or 'RI' in explanation)
+            changes.append((usage_type, diff, first_cost, last_cost, explanation, is_savings_plan_related))
     
     changes.sort(key=lambda x: abs(x[1]), reverse=True)
     
-    lines = [f"Cost {'increased' if change > 0 else 'decreased'} by USD {abs(change):,.2f} ({abs(pct):.1f}%)"]
+    # Add top changes with explanations - include significant cost changes and savings plan related items
+    significant_changes = [c for c in changes[:4] if abs(c[1]) > 0.01 or c[5]]
     
-    significant_changes = [c for c in changes[:3] if abs(c[1]) > 0.01]
     if significant_changes:
-        lines.append("\nTop changes:")
-        for usage_type, diff, first, last in significant_changes:
-            lines.append(f"- {usage_type}: USD {first:,.2f} → USD {last:,.2f}")
+        lines.append("\n[KEY DRIVERS]")
+        for usage_type, diff, first, last, explanation, _ in significant_changes:
+            # Simplify usage type name
+            simple_name = usage_type
+            for pattern, _ in COMPUTE_PATTERNS:
+                if pattern in usage_type:
+                    parts = usage_type.split(pattern)
+                    if len(parts) > 1 and parts[1]:
+                        extracted = parts[1].split(':')[0]
+                        simple_name = extracted if extracted else usage_type
+                    break
+            if ':' in simple_name and simple_name == usage_type:
+                simple_name = usage_type.split(':')[-1]
+            
+            direction = "↑" if diff > 0 else "↓" if diff < 0 else "→"
+            lines.append(f"• {simple_name}: ${first:,.2f} {direction} ${last:,.2f}")
+            lines.append(f"  Why: {explanation}")
+    
+    # Add special insights
+    insights = analyze_usage_patterns(data, months)
+    new_removed = detect_new_or_removed_services(data, months)
+    
+    all_insights = insights + new_removed
+    if all_insights:
+        lines.append("\n[INSIGHTS]")
+        for insight in all_insights[:4]:  # Limit to 4 insights
+            lines.append(insight)
+    
+    # Add recommendations for significant cost increases
+    if change > 100:
+        lines.append("\n[RECOMMENDATIONS]")
+        
+        # Check for potential savings
+        has_compute = any(is_compute_usage_type(d['usage_type']) 
+                        for d in data.get(last_month, {}).get('details', [])
+                        if d['cost'] > 0)
+        
+        has_data_transfer = any('DataTransfer' in d['usage_type'] or 'Bytes' in d['usage_type']
+                               for d in data.get(last_month, {}).get('details', [])
+                               if d['cost'] > 10)
+        
+        has_nat = any('NatGateway' in d['usage_type']
+                     for d in data.get(last_month, {}).get('details', [])
+                     if d['cost'] > 20)
+        
+        if has_compute:
+            lines.append("• Consider Savings Plans or Reserved Instances for steady compute workloads")
+        if has_data_transfer:
+            lines.append("• Review data transfer patterns; consider CloudFront or VPC endpoints")
+        if has_nat:
+            lines.append("• NAT Gateway costs are high; evaluate VPC endpoints for AWS services")
     
     return '\n'.join(lines)
 
