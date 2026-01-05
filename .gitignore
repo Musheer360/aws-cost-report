@@ -14,13 +14,6 @@ lambda/dateutil/
 lambda/et_xmlfile/
 lambda/six.py
 
-# Local installation generated files
-local/costreport
-local/venv/
-
-# Local server runtime files
-/tmp/costreports360.*
-
 # Python cache
 *.pyc
 __pycache__/
