@@ -93,7 +93,9 @@ def lambda_handler(event, context):
             cost = float(result['Metrics']['NetUnblendedCost']['Amount'])
             usage = float(result['Metrics']['UsageQuantity']['Amount'])
             
-            if cost > 0:
+            # Include entries with cost > 0, or compute resources with usage > 0
+            # This ensures EC2/RDS instances covered by Savings Plans still appear
+            if cost > 0 or (usage > 0 and is_compute_usage_type(usage_type)):
                 if service not in service_costs:
                     service_costs[service] = {}
                 if month not in service_costs[service]:
@@ -415,21 +417,29 @@ def create_regional_sheet(ws, regional_costs, months, month_names):
     for col in range(2, len(months) + 3):
         ws.column_dimensions[chr(64 + col)].width = 15
 
+# Patterns for hourly compute resources
+COMPUTE_PATTERNS = [
+    ('BoxUsage:', 'EC2'),
+    ('HeavyUsage:', 'EC2 Reserved'),
+    ('SpotUsage:', 'EC2 Spot'),
+    ('InstanceUsage:', 'RDS'),
+    ('Multi-AZUsage:', 'RDS Multi-AZ'),
+    ('ServerlessUsage:', 'RDS Serverless'),
+    ('NodeUsage:', 'ElastiCache'),
+    ('Node:', 'Redshift'),
+]
+
+def is_compute_usage_type(usage_type):
+    """Check if a usage type is a compute resource (instance hours)"""
+    for pattern, _ in COMPUTE_PATTERNS:
+        if pattern in usage_type:
+            return True
+    return False
+
 def format_compute_usage(usage_type, cost, usage):
     """Format compute instance usage with hourly rates"""
-    # Patterns for hourly compute resources
-    compute_patterns = [
-        ('BoxUsage:', 'EC2'),
-        ('HeavyUsage:', 'EC2 Reserved'),
-        ('SpotUsage:', 'EC2 Spot'),
-        ('InstanceUsage:', 'RDS'),
-        ('Multi-AZUsage:', 'RDS Multi-AZ'),
-        ('ServerlessUsage:', 'RDS Serverless'),
-        ('NodeUsage:', 'ElastiCache'),
-        ('Node:', 'Redshift'),
-    ]
     
-    for pattern, service_type in compute_patterns:
+    for pattern, service_type in COMPUTE_PATTERNS:
         if pattern in usage_type:
             # Extract instance type
             instance_type = usage_type.split(pattern)[1].split(':')[0]
@@ -453,7 +463,26 @@ def generate_detailed_comparison(month_names, data, months):
         if 'details' in month_data:
             lines.append(f"\n[{month_names[i].upper()} BREAKDOWN]")
             
-            sorted_details = sorted(month_data['details'], key=lambda x: x['cost'], reverse=True)[:5]
+            # Separate compute resources from other resources
+            compute_details = []
+            other_details = []
+            for detail in month_data['details']:
+                if is_compute_usage_type(detail['usage_type']):
+                    compute_details.append(detail)
+                else:
+                    other_details.append(detail)
+            
+            # Sort compute resources by usage (hours), others by cost
+            compute_details.sort(key=lambda x: x['usage'], reverse=True)
+            other_details.sort(key=lambda x: x['cost'], reverse=True)
+            
+            # Show top 5 compute resources first, then fill remaining slots with other resources
+            top_compute = compute_details[:5]
+            remaining_slots = 5 - len(top_compute)
+            top_other = other_details[:remaining_slots] if remaining_slots > 0 else []
+            
+            sorted_details = top_compute + top_other
+            
             for detail in sorted_details:
                 # Try to format as compute instance
                 formatted = format_compute_usage(detail['usage_type'], detail['cost'], detail['usage'])
