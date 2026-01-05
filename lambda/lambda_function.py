@@ -531,22 +531,30 @@ def generate_detailed_comparison(month_names, data, months):
                         lines.append(f"Usage: {detail['usage']:,.3f} units")
     
     if len(months) >= 2:
-        first_total = data.get(months[0], {}).get('total', 0)
-        last_total = data.get(months[-1], {}).get('total', 0)
+        first_total = round(data.get(months[0], {}).get('total', 0), 2)
+        last_total = round(data.get(months[-1], {}).get('total', 0), 2)
         change = last_total - first_total
         lines.append(f"\n[COST DIFFERENCE]")
-        lines.append(f"USD {abs(change):,.2f} ({'Increased' if change > 0 else 'Decreased'})")
+        if change == 0:
+            lines.append(f"USD 0.00 (No Change)")
+        else:
+            lines.append(f"USD {abs(change):,.2f} ({'Increased' if change > 0 else 'Decreased'})")
     
     return '\n'.join(lines)
 
 def generate_total_comparison(month_names, totals):
     lines = []
+    # Use rounded values for consistency with displayed values
+    rounded_totals = [round(t, 2) for t in totals]
     for i, name in enumerate(month_names):
-        lines.append(f"{name} Total: USD {totals[i]:,.2f}")
+        lines.append(f"{name} Total: USD {rounded_totals[i]:,.2f}")
     
-    if len(totals) >= 2:
-        change = totals[-1] - totals[0]
-        lines.append(f"\nTotal Change: USD {abs(change):,.2f} ({'Increased' if change > 0 else 'Decreased'})")
+    if len(rounded_totals) >= 2:
+        change = rounded_totals[-1] - rounded_totals[0]
+        if change == 0:
+            lines.append(f"\nTotal Change: USD 0.00 (No Change)")
+        else:
+            lines.append(f"\nTotal Change: USD {abs(change):,.2f} ({'Increased' if change > 0 else 'Decreased'})")
     
     return '\n'.join(lines)
 
@@ -718,18 +726,29 @@ def generate_detailed_reason(month_names, data, month_costs, months):
     if len(month_costs) < 2:
         return "Insufficient data for comparison"
     
-    change = month_costs[-1] - month_costs[0]
-    pct = (change / month_costs[0] * 100) if month_costs[0] > 0 else (100 if month_costs[-1] > 0 else 0)
+    # Use rounded values for consistency with displayed values
+    rounded_costs = [round(c, 2) for c in month_costs]
+    change = rounded_costs[-1] - rounded_costs[0]
+    
+    # Calculate percentage safely
+    if rounded_costs[0] > 0:
+        pct = (change / rounded_costs[0] * 100)
+    elif rounded_costs[-1] > 0:
+        pct = 100  # New service
+    else:
+        pct = 0  # Both zero
     
     lines = []
     
-    # Overall change summary
-    if abs(pct) < 5:
-        lines.append("Minimal cost difference (within 5%)")
+    # Overall change summary - use rounded values and absolute percentage
+    if change == 0:
+        lines.append("No cost change")
+    elif abs(pct) < 5:
+        lines.append(f"Minimal cost difference (within 5%): USD {abs(change):,.2f}")
     elif change > 0:
-        lines.append(f"Cost increased by ${abs(change):,.2f} ({abs(pct):.1f}%)")
+        lines.append(f"Cost increased by USD {abs(change):,.2f} ({abs(pct):.1f}%)")
     else:
-        lines.append(f"Cost decreased by ${abs(change):,.2f} ({abs(pct):.1f}%)")
+        lines.append(f"Cost decreased by USD {abs(change):,.2f} ({abs(pct):.1f}%)")
     
     # Get detailed analysis
     first_month = months[0]
@@ -823,11 +842,22 @@ def generate_simple_reason(costs):
     if len(costs) < 2:
         return "Insufficient data"
     
-    change = costs[-1] - costs[0]
-    pct = (change / costs[0] * 100) if costs[0] > 0 else 0
+    # Use rounded values for consistency with displayed values
+    rounded_costs = [round(c, 2) for c in costs]
+    change = rounded_costs[-1] - rounded_costs[0]
     
-    if abs(pct) < 5:
-        return "Minimal Cost Difference"
+    # Calculate percentage safely
+    if rounded_costs[0] > 0:
+        pct = (change / rounded_costs[0] * 100)
+    elif rounded_costs[-1] > 0:
+        pct = 100  # New service
+    else:
+        pct = 0  # Both zero
+    
+    if change == 0:
+        return "No Cost Change"
+    elif abs(pct) < 5:
+        return f"Minimal Cost Difference: USD {abs(change):,.2f}"
     elif change > 0:
         return f"Cost increased by USD {abs(change):,.2f} ({abs(pct):.1f}% increase)"
     else:
