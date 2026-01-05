@@ -142,14 +142,16 @@ def lambda_handler(event, context):
         month_costs = [data.get(m, {}).get('total', 0) for m in months]
         if len(month_costs) >= 2:
             change = month_costs[-1] - month_costs[0]
-            pct = (change / month_costs[0] * 100) if month_costs[0] > 0 else 0
             
-            if abs(pct) < 5:
-                same_services.append((service, data))
-            elif change > 0:
+            # Categorize based on actual cost change direction
+            # Any increase goes to increased, any decrease goes to decreased
+            # Only truly unchanged (change == 0) goes to same
+            if change > 0:
                 increased_services.append((service, data))
-            else:
+            elif change < 0:
                 decreased_services.append((service, data))
+            else:
+                same_services.append((service, data))
         else:
             same_services.append((service, data))
     
@@ -268,14 +270,21 @@ def create_service_sheet(ws, sorted_services, months, month_names):
         # Color coding entire row
         if len(month_costs) >= 2:
             change = month_costs[-1] - month_costs[0]
-            pct = (change / month_costs[0] * 100) if month_costs[0] > 0 else 0
-            
-            if abs(pct) < 5:
-                fill = blue_fill
-            elif change > 0:
-                fill = dark_red if pct > 20 else light_red
+            # Handle new services (first month = 0) - treat as 100% increase
+            if month_costs[0] > 0:
+                pct = (change / month_costs[0] * 100)
+            elif month_costs[-1] > 0:
+                pct = 100  # New service, treat as significant increase
             else:
+                pct = 0  # Both zero, no change
+            
+            # Color based on actual change direction
+            if change > 0:
+                fill = dark_red if pct > 20 else light_red
+            elif change < 0:
                 fill = light_green
+            else:
+                fill = blue_fill  # Only truly unchanged services
             
             for col in range(1, len(months) + 5):
                 ws.cell(row, col).fill = fill
