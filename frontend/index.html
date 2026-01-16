@@ -443,15 +443,15 @@
             <div class="info-box">
                 <p>
                     <strong>Purpose:</strong> This tool generates a comprehensive Word document 
-                    analyzing AWS cost increases after a budget threshold has been exceeded. 
-                    It identifies cost drivers, provides root cause analysis, and offers 
-                    actionable recommendations.
+                    analyzing AWS costs when the <strong>daily budget</strong> has been exceeded. 
+                    It analyzes the last 14 days of spending, identifies cost drivers, provides 
+                    root cause analysis, and offers actionable recommendations.
                 </p>
             </div>
             <div class="warning-box">
                 <p>
                     <strong>⏰ Important:</strong> Run this tool <strong>24 hours after</strong> 
-                    receiving the budget breach notification. This allows AWS Cost Explorer 
+                    the daily budget breach notification. This allows AWS Cost Explorer 
                     data to fully populate for accurate analysis.
                 </p>
             </div>
@@ -462,47 +462,21 @@
             <div class="card-header">
                 <div class="card-icon">💰</div>
                 <div>
-                    <div class="card-title">Budget Information</div>
-                    <div class="card-subtitle">Enter the breached budget details</div>
+                    <div class="card-title">Daily Budget Configuration</div>
+                    <div class="card-subtitle">Enter your daily budget threshold and breach date</div>
                 </div>
             </div>
             
             <div class="form-group">
-                <label>Budget Amount (USD) <span class="required">*</span></label>
-                <input type="number" id="budgetAmount" placeholder="e.g., 10000" step="0.01" min="0">
+                <label>Daily Budget Amount (USD) <span class="required">*</span></label>
+                <input type="number" id="dailyBudget" placeholder="100" step="0.01" min="0" value="100">
+                <small style="color: var(--gray-600); font-size: 0.85rem;">Default: $100/day</small>
             </div>
 
             <div class="form-group">
-                <label>Breach Date</label>
+                <label>Breach Date <span class="required">*</span></label>
                 <input type="date" id="breachDate">
-            </div>
-        </div>
-
-        <!-- Analysis Period -->
-        <div class="card">
-            <div class="card-header">
-                <div class="card-icon">📅</div>
-                <div>
-                    <div class="card-title">Analysis Period</div>
-                    <div class="card-subtitle">Select months to compare (previous vs current)</div>
-                </div>
-            </div>
-
-            <div class="month-selectors">
-                <div class="month-group">
-                    <label>Previous Month (Baseline)</label>
-                    <div class="month-select-row">
-                        <select id="prevYear" class="year-select"></select>
-                        <select id="prevMonth" class="month-select"></select>
-                    </div>
-                </div>
-                <div class="month-group">
-                    <label>Current Month (Breach Period)</label>
-                    <div class="month-select-row">
-                        <select id="currYear" class="year-select"></select>
-                        <select id="currMonth" class="month-select"></select>
-                    </div>
-                </div>
+                <small style="color: var(--gray-600); font-size: 0.85rem;">The date when daily spending exceeded the budget</small>
             </div>
         </div>
 
@@ -575,51 +549,13 @@
 
     <script>
         const API_ENDPOINT = 'PLACEHOLDER_API_ENDPOINT';
-        
-        const MONTHS = [
-            'January', 'February', 'March', 'April', 'May', 'June',
-            'July', 'August', 'September', 'October', 'November', 'December'
-        ];
 
-        // Initialize date selectors
-        function initializeDateSelectors() {
-            const currentDate = new Date();
-            const currentYear = currentDate.getFullYear();
-            const currentMonth = currentDate.getMonth();
-
-            // Populate year selects
-            const yearSelects = document.querySelectorAll('.year-select');
-            yearSelects.forEach(select => {
-                for (let year = currentYear; year >= currentYear - 2; year--) {
-                    const option = document.createElement('option');
-                    option.value = year;
-                    option.textContent = year;
-                    select.appendChild(option);
-                }
-            });
-
-            // Populate month selects
-            const monthSelects = document.querySelectorAll('.month-select');
-            monthSelects.forEach(select => {
-                MONTHS.forEach((month, index) => {
-                    const option = document.createElement('option');
-                    option.value = String(index + 1).padStart(2, '0');
-                    option.textContent = month;
-                    select.appendChild(option);
-                });
-            });
-
-            // Set default values (previous month and current month)
-            const prevMonthIndex = currentMonth === 0 ? 11 : currentMonth - 1;
-            const prevYear = currentMonth === 0 ? currentYear - 1 : currentYear;
-
-            document.getElementById('prevYear').value = prevYear;
-            document.getElementById('prevMonth').value = String(prevMonthIndex + 1).padStart(2, '0');
-            document.getElementById('currYear').value = currentYear;
-            document.getElementById('currMonth').value = String(currentMonth + 1).padStart(2, '0');
-
-            // Set default breach date to today
-            document.getElementById('breachDate').value = currentDate.toISOString().split('T')[0];
+        // Initialize the page
+        function initializePage() {
+            // Set default breach date to yesterday (24 hours after breach allows data to populate)
+            const yesterday = new Date();
+            yesterday.setDate(yesterday.getDate() - 1);
+            document.getElementById('breachDate').value = yesterday.toISOString().split('T')[0];
         }
 
         // Switch authentication method
@@ -651,30 +587,28 @@
 
         // Generate report
         async function generateReport() {
-            const budgetAmount = parseFloat(document.getElementById('budgetAmount').value) || 0;
+            const dailyBudget = parseFloat(document.getElementById('dailyBudget').value) || 100;
             const breachDate = document.getElementById('breachDate').value;
             
-            const prevYear = document.getElementById('prevYear').value;
-            const prevMonth = document.getElementById('prevMonth').value;
-            const currYear = document.getElementById('currYear').value;
-            const currMonth = document.getElementById('currMonth').value;
+            // Validate breach date
+            if (!breachDate) {
+                showStatus('error', 'Please select the breach date.');
+                return;
+            }
 
-            const months = [
-                `${prevYear}-${prevMonth}`,
-                `${currYear}-${currMonth}`
-            ];
-
-            // Validate
-            if (months[0] === months[1]) {
-                showStatus('error', 'Please select different months for comparison.');
+            // Validate breach date is not in the future
+            const breachDateTime = new Date(breachDate);
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            if (breachDateTime > today) {
+                showStatus('error', 'Breach date cannot be in the future.');
                 return;
             }
 
             // Build request
             const isRoleAuth = document.getElementById('roleAuth').classList.contains('active');
             let requestBody = {
-                months: months,
-                budgetAmount: budgetAmount,
+                dailyBudget: dailyBudget,
                 breachDate: breachDate
             };
 
@@ -697,7 +631,7 @@
                 requestBody.secretAccessKey = secretAccessKey;
             }
 
-            showStatus('loading', 'Generating budget breach analysis report... This may take a minute.');
+            showStatus('loading', 'Generating daily budget breach analysis report with charts... This may take 1-2 minutes.');
 
             try {
                 const response = await fetch(API_ENDPOINT, {
@@ -837,7 +771,7 @@ Format: arn:aws:iam::ACCOUNT_ID:role/ExamOnlineCostAnalysisRole
         }
 
         // Initialize on page load
-        document.addEventListener('DOMContentLoaded', initializeDateSelectors);
+        document.addEventListener('DOMContentLoaded', initializePage);
     </script>
 </body>
 </html>
