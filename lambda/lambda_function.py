@@ -1,6 +1,7 @@
 import json
 import boto3
 import os
+import calendar
 from datetime import datetime
 from docx import Document
 from docx.shared import Inches, Pt, RGBColor, Cm, Twips
@@ -12,6 +13,9 @@ from docx.oxml.ns import qn, nsmap
 from docx.oxml import OxmlElement
 import base64
 from io import BytesIO
+
+# Constants
+MAX_DAILY_DISPLAY_DAYS = 15  # Maximum days to show in daily breakdown table
 
 
 def lambda_handler(event, context):
@@ -513,13 +517,14 @@ def add_executive_summary(doc, increased_services, month_names, budget_amount,
     # Key Metrics Section
     doc.add_heading('Key Financial Metrics', level=2)
     
-    # Create metrics table - now with 5 columns including MTD
-    metrics_table = doc.add_table(rows=2, cols=5)
+    # Row 1 - Labels
+    labels = [f'{month_names[0]}', f'{month_names[-1]}', 'Month Change', 'MTD Spend', 'Services Impacted']
+    
+    # Create metrics table - columns based on labels count
+    metrics_table = doc.add_table(rows=2, cols=len(labels))
     metrics_table.alignment = WD_TABLE_ALIGNMENT.CENTER
     format_metrics_table(metrics_table)
     
-    # Row 1 - Labels
-    labels = [f'{month_names[0]}', f'{month_names[-1]}', 'Month Change', 'MTD Spend', 'Services Impacted']
     for i, label in enumerate(labels):
         cell = metrics_table.rows[0].cells[i]
         cell.text = label
@@ -557,12 +562,15 @@ def add_executive_summary(doc, increased_services, month_names, budget_amount,
         overage = overall_current - budget_amount
         overage_pct = (overage / budget_amount * 100) if budget_amount > 0 else 0
         
-        # Calculate daily burn rate
+        # Calculate daily burn rate with actual days in month
+        current_month_dt = datetime.strptime(month_names[-1], "%B %Y")
+        days_in_month = calendar.monthrange(current_month_dt.year, current_month_dt.month)[1]
+        
         if days_elapsed > 0:
             daily_avg = mtd_total / days_elapsed
-            projected_month_end = daily_avg * 30  # Approximate
+            projected_month_end = daily_avg * days_in_month
         else:
-            daily_avg = overall_current / 30
+            daily_avg = overall_current / days_in_month
             projected_month_end = overall_current
         
         if overage > 0:
@@ -675,7 +683,7 @@ def add_daily_cost_trends(doc, daily_costs, daily_service_costs, budget_amount,
         doc.add_heading('Daily Cost Breakdown', level=2)
         
         # Show daily costs in a table (max 15 days to fit page)
-        display_days = daily_costs[:15] if len(daily_costs) > 15 else daily_costs
+        display_days = daily_costs[:MAX_DAILY_DISPLAY_DAYS] if len(daily_costs) > MAX_DAILY_DISPLAY_DAYS else daily_costs
         
         daily_table = doc.add_table(rows=len(display_days) + 1, cols=4)
         daily_table.alignment = WD_TABLE_ALIGNMENT.CENTER
