@@ -142,14 +142,16 @@ def lambda_handler(event, context):
                     daily_regional_costs[region].append({'date': day, 'cost': cost})
                     
     except Exception as e:
-        # If daily data fetch fails, return error
+        # Log the error for debugging but return generic message to client
+        print(f'Error fetching cost data: {str(e)}')
         return {
             'statusCode': 500,
             'headers': {
                 'Content-Type': 'application/json',
                 'Access-Control-Allow-Origin': allowed_origin
             },
-            'body': json.dumps({'error': f'Failed to fetch cost data: {str(e)}'})
+            'body': json.dumps({'error': 'Failed to fetch cost data. Please check your credentials and ensure Cost Explorer is enabled.'})
+        }
         }
     
     # Get detailed service breakdown for breach date
@@ -200,8 +202,9 @@ def lambda_handler(event, context):
         
         breach_day_services.sort(key=lambda x: x['cost'], reverse=True)
         
-    except Exception:
-        pass
+    except Exception as e:
+        # Log error but continue - breach day details are optional
+        print(f'Warning: Could not fetch breach day service details: {str(e)}')
     
     # Calculate breach day cost
     breach_day_cost = 0
