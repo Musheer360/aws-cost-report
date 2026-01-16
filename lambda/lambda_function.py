@@ -969,7 +969,11 @@ def format_cell(cell, bold=False, bg_color=None, font_color=None,
             run.font.size = Pt(font_size)
             run.font.bold = bold
             if font_color:
-                run.font.color.rgb = RGBColor.from_string(font_color)
+                # Parse hex color string to RGB
+                r = int(font_color[0:2], 16)
+                g = int(font_color[2:4], 16)
+                b = int(font_color[4:6], 16)
+                run.font.color.rgb = RGBColor(r, g, b)
     
     # Set background color
     if bg_color:
@@ -1065,7 +1069,15 @@ def add_info_box(doc, title, content, bg_color):
 
 
 def add_alert_box(doc, title, content, bg_color, title_color):
-    """Add an alert box."""
+    """Add an alert box.
+    
+    Args:
+        doc: Document object
+        title: Box title text
+        content: Box content text
+        bg_color: Background color (RGBColor object)
+        title_color: Title text color (RGBColor object)
+    """
     table = doc.add_table(rows=1, cols=1)
     table.alignment = WD_TABLE_ALIGNMENT.CENTER
     cell = table.rows[0].cells[0]
@@ -1081,8 +1093,8 @@ def add_alert_box(doc, title, content, bg_color, title_color):
     content_para = cell.add_paragraph(content)
     content_para.paragraph_format.space_before = Pt(8)
     
-    # Background color
-    hex_color = '{:02X}{:02X}{:02X}'.format(bg_color[0], bg_color[1], bg_color[2])
+    # Background color - RGBColor object converts to hex string
+    hex_color = str(bg_color)
     set_cell_shading(cell, hex_color)
     
     # Padding
