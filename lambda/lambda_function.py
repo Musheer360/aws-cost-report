@@ -69,7 +69,63 @@ def lambda_handler(event, context):
         dt = datetime.strptime(month, "%Y-%m")
         month_names.append(dt.strftime("%B %Y"))
     
-    # Fetch cost data
+    # Current month for MTD analysis (the breach month)
+    current_month = months[-1]
+    current_month_start = f"{current_month}-01"
+    
+    # Calculate end date for daily data (today or end of month)
+    today = datetime.now()
+    current_month_dt = datetime.strptime(current_month_start, "%Y-%m-%d")
+    if current_month_dt.year == today.year and current_month_dt.month == today.month:
+        # Current month - use today as end date
+        daily_end = today.strftime('%Y-%m-%d')
+    else:
+        # Past month - use end of that month
+        if current_month_dt.month == 12:
+            daily_end = f"{current_month_dt.year + 1}-01-01"
+        else:
+            daily_end = f"{current_month_dt.year}-{str(current_month_dt.month + 1).zfill(2)}-01"
+    
+    # Fetch DAILY cost data for MTD trend analysis (from budget reset on the 1st)
+    daily_costs = []
+    daily_service_costs = {}
+    
+    try:
+        daily_response = ce.get_cost_and_usage(
+            TimePeriod={'Start': current_month_start, 'End': daily_end},
+            Granularity='DAILY',
+            Metrics=['NetUnblendedCost'],
+            Filter={'Not': {'Dimensions': {'Key': 'RECORD_TYPE', 'Values': ['Tax']}}}
+        )
+        
+        for result in daily_response['ResultsByTime']:
+            day = result['TimePeriod']['Start']
+            cost = float(result['Total']['NetUnblendedCost']['Amount'])
+            daily_costs.append({'date': day, 'cost': cost})
+        
+        # Get daily costs by service for top contributors
+        daily_service_response = ce.get_cost_and_usage(
+            TimePeriod={'Start': current_month_start, 'End': daily_end},
+            Granularity='DAILY',
+            Metrics=['NetUnblendedCost'],
+            GroupBy=[{'Type': 'DIMENSION', 'Key': 'SERVICE'}],
+            Filter={'Not': {'Dimensions': {'Key': 'RECORD_TYPE', 'Values': ['Tax']}}}
+        )
+        
+        for result in daily_service_response['ResultsByTime']:
+            day = result['TimePeriod']['Start']
+            for group in result['Groups']:
+                service = group['Keys'][0]
+                cost = float(group['Metrics']['NetUnblendedCost']['Amount'])
+                if cost > 0:
+                    if service not in daily_service_costs:
+                        daily_service_costs[service] = []
+                    daily_service_costs[service].append({'date': day, 'cost': cost})
+    except Exception:
+        # If daily data fetch fails, continue without it
+        pass
+    
+    # Fetch monthly cost data
     service_costs = {}
     regional_costs = {}
     
@@ -158,11 +214,15 @@ def lambda_handler(event, context):
     ), 2)
     total_increase = sum(s['change'] for s in increased_services)
     
+    # Calculate MTD (Month-to-Date) totals from daily data
+    mtd_total = sum(d['cost'] for d in daily_costs) if daily_costs else overall_current
+    days_elapsed = len(daily_costs) if daily_costs else 0
+    
     # Generate Word Document
     doc = create_formatted_document(
         increased_services, month_names, months, budget_amount,
         breach_date, overall_previous, overall_current, total_increase,
-        regional_costs
+        regional_costs, daily_costs, daily_service_costs, mtd_total, days_elapsed
     )
     
     # Save to bytes
@@ -190,7 +250,8 @@ def lambda_handler(event, context):
 
 def create_formatted_document(increased_services, month_names, months, budget_amount,
                                breach_date, overall_previous, overall_current, 
-                               total_increase, regional_costs):
+                               total_increase, regional_costs, daily_costs=None,
+                               daily_service_costs=None, mtd_total=0, days_elapsed=0):
     """Create a professionally formatted Word document."""
     doc = Document()
     
@@ -205,7 +266,13 @@ def create_formatted_document(increased_services, month_names, months, budget_am
     
     # ===== EXECUTIVE SUMMARY =====
     add_executive_summary(doc, increased_services, month_names, budget_amount,
-                          overall_previous, overall_current, total_increase)
+                          overall_previous, overall_current, total_increase,
+                          mtd_total, days_elapsed)
+    
+    # ===== MTD DAILY COST TRENDS (from budget reset on 1st) =====
+    if daily_costs:
+        add_daily_cost_trends(doc, daily_costs, daily_service_costs, budget_amount, 
+                              month_names[-1], increased_services)
     
     # ===== COST DRIVERS ANALYSIS =====
     add_cost_drivers_analysis(doc, increased_services, month_names, total_increase)
@@ -391,11 +458,12 @@ def add_table_of_contents(doc):
     # TOC entries
     toc_entries = [
         ('1.', 'Executive Summary', '3'),
-        ('2.', 'Cost Drivers Analysis', '4'),
-        ('3.', 'Detailed Service Analysis', '5'),
-        ('4.', 'Regional Cost Analysis', '7'),
-        ('5.', 'Recommendations', '8'),
-        ('6.', 'Appendix: Complete Data', '10'),
+        ('2.', 'Month-to-Date Cost Trends (Since Budget Reset)', '4'),
+        ('3.', 'Cost Drivers Analysis', '5'),
+        ('4.', 'Detailed Service Analysis', '6'),
+        ('5.', 'Regional Cost Analysis', '8'),
+        ('6.', 'Recommendations', '9'),
+        ('7.', 'Appendix: Complete Data', '11'),
     ]
     
     for num, title, page in toc_entries:
@@ -427,16 +495,17 @@ def add_table_of_contents(doc):
 
 
 def add_executive_summary(doc, increased_services, month_names, budget_amount,
-                          overall_previous, overall_current, total_increase):
+                          overall_previous, overall_current, total_increase,
+                          mtd_total=0, days_elapsed=0):
     """Add executive summary section."""
     doc.add_heading('Executive Summary', level=1)
     
     # Overview box
     add_info_box(doc, 'OVERVIEW', 
         f'This report provides a comprehensive analysis of AWS cost increases between '
-        f'{month_names[0]} and {month_names[-1]}. The analysis focuses exclusively on '
-        f'services that experienced cost growth, identifying root causes and providing '
-        f'actionable recommendations to optimize spending.',
+        f'{month_names[0]} (baseline) and {month_names[-1]} (breach period). The analysis '
+        f'compares month-over-month spending changes from when the budget resets on the 1st, '
+        f'identifies services with cost growth, and provides actionable recommendations.',
         RGBColor(232, 245, 253))
     
     doc.add_paragraph()
@@ -444,33 +513,40 @@ def add_executive_summary(doc, increased_services, month_names, budget_amount,
     # Key Metrics Section
     doc.add_heading('Key Financial Metrics', level=2)
     
-    # Create metrics table
-    metrics_table = doc.add_table(rows=2, cols=4)
+    # Create metrics table - now with 5 columns including MTD
+    metrics_table = doc.add_table(rows=2, cols=5)
     metrics_table.alignment = WD_TABLE_ALIGNMENT.CENTER
     format_metrics_table(metrics_table)
     
     # Row 1 - Labels
-    labels = ['Previous Period', 'Current Period', 'Total Change', 'Services Impacted']
+    labels = [f'{month_names[0]}', f'{month_names[-1]}', 'Month Change', 'MTD Spend', 'Services Impacted']
     for i, label in enumerate(labels):
         cell = metrics_table.rows[0].cells[i]
         cell.text = label
         format_cell(cell, bold=True, bg_color='003366', font_color='FFFFFF', 
-                   font_size=10, align='center')
+                   font_size=9, align='center')
     
     # Row 2 - Values
     overall_change = overall_current - overall_previous
     change_sign = '+' if overall_change >= 0 else ''
+    mtd_display = f'${mtd_total:,.2f}' if mtd_total > 0 else f'${overall_current:,.2f}'
     values = [
         f'${overall_previous:,.2f}',
         f'${overall_current:,.2f}',
         f'{change_sign}${overall_change:,.2f}',
+        mtd_display,
         str(len(increased_services))
     ]
     for i, value in enumerate(values):
         cell = metrics_table.rows[1].cells[i]
         cell.text = value
-        bg = 'FFE6E6' if i == 2 and overall_change > 0 else 'F5F5F5'
-        format_cell(cell, bold=True, bg_color=bg, font_size=14, align='center')
+        if i == 2 and overall_change > 0:
+            bg = 'FFE6E6'
+        elif i == 3 and budget_amount > 0 and mtd_total > budget_amount:
+            bg = 'FFE6E6'
+        else:
+            bg = 'F5F5F5'
+        format_cell(cell, bold=True, bg_color=bg, font_size=12, align='center')
     
     doc.add_paragraph()
     
@@ -481,16 +557,26 @@ def add_executive_summary(doc, increased_services, month_names, budget_amount,
         overage = overall_current - budget_amount
         overage_pct = (overage / budget_amount * 100) if budget_amount > 0 else 0
         
+        # Calculate daily burn rate
+        if days_elapsed > 0:
+            daily_avg = mtd_total / days_elapsed
+            projected_month_end = daily_avg * 30  # Approximate
+        else:
+            daily_avg = overall_current / 30
+            projected_month_end = overall_current
+        
         if overage > 0:
             add_alert_box(doc, '⚠️ BUDGET EXCEEDED',
                 f'Current spending of ${overall_current:,.2f} has exceeded the budget '
                 f'threshold of ${budget_amount:,.2f} by ${overage:,.2f} ({overage_pct:.1f}%). '
+                f'Average daily spend: ${daily_avg:,.2f}. '
                 f'Immediate action is required to identify and address cost drivers.',
                 RGBColor(255, 235, 235), RGBColor(153, 0, 0))
         else:
             add_alert_box(doc, '✓ WITHIN BUDGET',
                 f'Current spending of ${overall_current:,.2f} is within the budget '
-                f'threshold of ${budget_amount:,.2f}.',
+                f'threshold of ${budget_amount:,.2f}. '
+                f'Projected month-end: ${projected_month_end:,.2f}.',
                 RGBColor(235, 255, 235), RGBColor(0, 102, 0))
         
         doc.add_paragraph()
@@ -530,6 +616,163 @@ def add_executive_summary(doc, increased_services, month_names, budget_amount,
             row.cells[4].text = f"{svc['pct_change']:.1f}%"
             bg = 'FF6666' if svc['pct_change'] > 50 else 'FFCCCC' if svc['pct_change'] > 20 else 'FFE6E6'
             format_cell(row.cells[4], font_size=10, align='center', bg_color=bg, bold=True)
+    
+    doc.add_page_break()
+
+
+def add_daily_cost_trends(doc, daily_costs, daily_service_costs, budget_amount, 
+                          current_month_name, increased_services):
+    """Add daily cost trends section showing MTD spending from budget reset."""
+    doc.add_heading('Month-to-Date Cost Trends (Since Budget Reset)', level=1)
+    
+    intro = doc.add_paragraph()
+    intro.add_run(
+        f'This section shows daily cost accumulation for {current_month_name}, '
+        f'starting from the 1st when the monthly budget resets. '
+        f'Understanding daily spend patterns helps identify when cost spikes occurred '
+        f'and which services contributed to the budget breach.'
+    )
+    intro.paragraph_format.space_after = Pt(16)
+    
+    # Calculate MTD statistics
+    if daily_costs:
+        total_mtd = sum(d['cost'] for d in daily_costs)
+        days = len(daily_costs)
+        avg_daily = total_mtd / days if days > 0 else 0
+        max_day = max(daily_costs, key=lambda x: x['cost'])
+        min_day = min(daily_costs, key=lambda x: x['cost'])
+        
+        # MTD Summary Box
+        doc.add_heading('MTD Spending Summary', level=2)
+        
+        summary_table = doc.add_table(rows=2, cols=4)
+        summary_table.alignment = WD_TABLE_ALIGNMENT.CENTER
+        format_metrics_table(summary_table)
+        
+        labels = ['Days Tracked', 'Total MTD Spend', 'Avg Daily Spend', 'Budget Used']
+        for i, label in enumerate(labels):
+            cell = summary_table.rows[0].cells[i]
+            cell.text = label
+            format_cell(cell, bold=True, bg_color='003366', font_color='FFFFFF',
+                       font_size=9, align='center')
+        
+        budget_used_pct = (total_mtd / budget_amount * 100) if budget_amount > 0 else 0
+        values = [
+            str(days),
+            f'${total_mtd:,.2f}',
+            f'${avg_daily:,.2f}',
+            f'{budget_used_pct:.1f}%' if budget_amount > 0 else 'N/A'
+        ]
+        for i, value in enumerate(values):
+            cell = summary_table.rows[1].cells[i]
+            cell.text = value
+            bg = 'FFE6E6' if i == 3 and budget_used_pct > 100 else 'F5F5F5'
+            format_cell(cell, bold=True, bg_color=bg, font_size=12, align='center')
+        
+        doc.add_paragraph()
+        
+        # Daily Breakdown Table
+        doc.add_heading('Daily Cost Breakdown', level=2)
+        
+        # Show daily costs in a table (max 15 days to fit page)
+        display_days = daily_costs[:15] if len(daily_costs) > 15 else daily_costs
+        
+        daily_table = doc.add_table(rows=len(display_days) + 1, cols=4)
+        daily_table.alignment = WD_TABLE_ALIGNMENT.CENTER
+        format_data_table(daily_table)
+        
+        headers = ['Date', 'Daily Cost', 'Cumulative Total', 'vs Budget']
+        for i, header in enumerate(headers):
+            cell = daily_table.rows[0].cells[i]
+            cell.text = header
+            format_cell(cell, bold=True, bg_color='4A86C7', font_color='FFFFFF',
+                       font_size=9, align='center')
+        
+        cumulative = 0
+        for row_idx, day_data in enumerate(display_days, 1):
+            row = daily_table.rows[row_idx]
+            cumulative += day_data['cost']
+            
+            # Format date nicely
+            date_obj = datetime.strptime(day_data['date'], '%Y-%m-%d')
+            row.cells[0].text = date_obj.strftime('%b %d')
+            format_cell(row.cells[0], font_size=9, align='center')
+            
+            row.cells[1].text = f"${day_data['cost']:,.2f}"
+            format_cell(row.cells[1], font_size=9, align='right')
+            
+            row.cells[2].text = f"${cumulative:,.2f}"
+            format_cell(row.cells[2], font_size=9, align='right')
+            
+            if budget_amount > 0:
+                pct_of_budget = (cumulative / budget_amount * 100)
+                row.cells[3].text = f"{pct_of_budget:.1f}%"
+                bg = 'FF6666' if pct_of_budget > 100 else 'FFCCCC' if pct_of_budget > 80 else 'F5F5F5'
+            else:
+                row.cells[3].text = 'N/A'
+                bg = 'F5F5F5'
+            format_cell(row.cells[3], font_size=9, align='center', bg_color=bg)
+        
+        doc.add_paragraph()
+        
+        # Peak Spending Days
+        doc.add_heading('Peak Spending Analysis', level=2)
+        
+        peak_para = doc.add_paragraph()
+        peak_para.add_run('Highest Spend Day: ').bold = True
+        max_date = datetime.strptime(max_day['date'], '%Y-%m-%d')
+        peak_para.add_run(f"{max_date.strftime('%B %d')} - ${max_day['cost']:,.2f}")
+        
+        low_para = doc.add_paragraph()
+        low_para.add_run('Lowest Spend Day: ').bold = True
+        min_date = datetime.strptime(min_day['date'], '%Y-%m-%d')
+        low_para.add_run(f"{min_date.strftime('%B %d')} - ${min_day['cost']:,.2f}")
+        
+        variance = max_day['cost'] - min_day['cost']
+        variance_para = doc.add_paragraph()
+        variance_para.add_run('Daily Variance: ').bold = True
+        variance_para.add_run(f"${variance:,.2f} (indicates cost volatility)")
+        
+        doc.add_paragraph()
+        
+        # Top Service Contributors in Current Month
+        if daily_service_costs:
+            doc.add_heading('Top Daily Cost Contributors', level=2)
+            
+            # Calculate total for each service
+            service_totals = []
+            for service, costs in daily_service_costs.items():
+                total = sum(c['cost'] for c in costs)
+                if total > 0:
+                    service_totals.append({'service': service, 'total': total})
+            
+            service_totals.sort(key=lambda x: x['total'], reverse=True)
+            top_services = service_totals[:5]
+            
+            if top_services:
+                svc_table = doc.add_table(rows=len(top_services) + 1, cols=3)
+                svc_table.alignment = WD_TABLE_ALIGNMENT.CENTER
+                format_data_table(svc_table)
+                
+                headers = ['Service', 'MTD Total', '% of MTD Spend']
+                for i, header in enumerate(headers):
+                    cell = svc_table.rows[0].cells[i]
+                    cell.text = header
+                    format_cell(cell, bold=True, bg_color='996600', font_color='FFFFFF',
+                               font_size=9, align='center')
+                
+                for row_idx, svc in enumerate(top_services, 1):
+                    row = svc_table.rows[row_idx]
+                    
+                    row.cells[0].text = truncate_service_name(svc['service'])
+                    format_cell(row.cells[0], font_size=9, align='left')
+                    
+                    row.cells[1].text = f"${svc['total']:,.2f}"
+                    format_cell(row.cells[1], font_size=9, align='right')
+                    
+                    pct = (svc['total'] / total_mtd * 100) if total_mtd > 0 else 0
+                    row.cells[2].text = f"{pct:.1f}%"
+                    format_cell(row.cells[2], font_size=9, align='center')
     
     doc.add_page_break()
 
