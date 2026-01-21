@@ -53,35 +53,91 @@ def lambda_handler(event, context):
             'body': ''
         }
     
-    body = json.loads(event['body'])
+    # Parse and validate request body
+    try:
+        body = json.loads(event.get('body', '{}'))
+    except json.JSONDecodeError:
+        return {
+            'statusCode': 400,
+            'headers': {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': allowed_origin
+            },
+            'body': json.dumps({'error': 'Invalid JSON in request body'})
+        }
+    
     # Daily budget amount (default $100)
-    daily_budget = body.get('dailyBudget', body.get('budgetAmount', DEFAULT_DAILY_BUDGET))
+    try:
+        daily_budget = float(body.get('dailyBudget', body.get('budgetAmount', DEFAULT_DAILY_BUDGET)))
+        if daily_budget <= 0:
+            raise ValueError("Budget must be positive")
+    except (TypeError, ValueError):
+        return {
+            'statusCode': 400,
+            'headers': {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': allowed_origin
+            },
+            'body': json.dumps({'error': 'Invalid dailyBudget. Must be a positive number.'})
+        }
+    
     breach_date = body.get('breachDate', datetime.now().strftime('%Y-%m-%d'))
     
     # Authentication
-    if 'roleArn' in body:
-        sts = boto3.client('sts')
-        assumed_role = sts.assume_role(
-            RoleArn=body['roleArn'],
-            RoleSessionName='ExamOnlineBudgetAnalysis'
-        )
-        session = boto3.Session(
-            aws_access_key_id=assumed_role['Credentials']['AccessKeyId'],
-            aws_secret_access_key=assumed_role['Credentials']['SecretAccessKey'],
-            aws_session_token=assumed_role['Credentials']['SessionToken'],
-            region_name='us-east-1'
-        )
-    else:
-        session = boto3.Session(
-            aws_access_key_id=body['accessKeyId'],
-            aws_secret_access_key=body['secretAccessKey'],
-            region_name=body.get('region', 'us-east-1')
-        )
+    try:
+        if 'roleArn' in body:
+            sts = boto3.client('sts')
+            assumed_role = sts.assume_role(
+                RoleArn=body['roleArn'],
+                RoleSessionName='ExamOnlineBudgetAnalysis'
+            )
+            session = boto3.Session(
+                aws_access_key_id=assumed_role['Credentials']['AccessKeyId'],
+                aws_secret_access_key=assumed_role['Credentials']['SecretAccessKey'],
+                aws_session_token=assumed_role['Credentials']['SessionToken'],
+                region_name='us-east-1'
+            )
+        else:
+            # Validate required credentials are present
+            if 'accessKeyId' not in body or 'secretAccessKey' not in body:
+                return {
+                    'statusCode': 400,
+                    'headers': {
+                        'Content-Type': 'application/json',
+                        'Access-Control-Allow-Origin': allowed_origin
+                    },
+                    'body': json.dumps({'error': 'Missing required credentials. Provide either roleArn or both accessKeyId and secretAccessKey.'})
+                }
+            session = boto3.Session(
+                aws_access_key_id=body['accessKeyId'],
+                aws_secret_access_key=body['secretAccessKey'],
+                region_name=body.get('region', 'us-east-1')
+            )
+    except Exception as e:
+        print(f'Authentication error: {str(e)}')
+        return {
+            'statusCode': 401,
+            'headers': {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': allowed_origin
+            },
+            'body': json.dumps({'error': 'Authentication failed. Please check your credentials or role ARN.'})
+        }
     
     ce = session.client('ce')
     
     # Parse breach date and calculate analysis period
-    breach_dt = datetime.strptime(breach_date, '%Y-%m-%d')
+    try:
+        breach_dt = datetime.strptime(breach_date, '%Y-%m-%d')
+    except ValueError:
+        return {
+            'statusCode': 400,
+            'headers': {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': allowed_origin
+            },
+            'body': json.dumps({'error': 'Invalid breachDate format. Expected YYYY-MM-DD.'})
+        }
     
     # Analyze the last ANALYSIS_DAYS days leading up to and including breach date
     analysis_start = (breach_dt - timedelta(days=ANALYSIS_DAYS - 1)).strftime('%Y-%m-%d')
@@ -154,7 +210,6 @@ def lambda_handler(event, context):
                 'Access-Control-Allow-Origin': allowed_origin
             },
             'body': json.dumps({'error': 'Failed to fetch cost data. Please check your credentials and ensure Cost Explorer is enabled.'})
-        }
         }
     
     # Get detailed service breakdown for breach date
@@ -298,8 +353,14 @@ def generate_charts(daily_costs, daily_service_costs, daily_budget, breach_date)
     if not daily_costs:
         return charts
     
-    # Set style for professional look
-    plt.style.use('seaborn-v0_8-whitegrid')
+    # Set style for professional look (with fallback for different matplotlib versions)
+    try:
+        plt.style.use('seaborn-v0_8-whitegrid')
+    except OSError:
+        try:
+            plt.style.use('seaborn-whitegrid')
+        except OSError:
+            plt.style.use('ggplot')  # Fallback to ggplot style
     
     # Chart 1: Daily Cost Trend with Budget Line
     fig1, ax1 = plt.subplots(figsize=(10, 5))
