@@ -81,7 +81,20 @@ def lambda_handler(event, context):
             'body': json.dumps({'error': 'Invalid dailyBudget. Must be a positive number.'})
         }
     
-    breach_date = body.get('breachDate', datetime.now().strftime('%Y-%m-%d'))
+    # Parse and validate breach_date before authentication to fail fast
+    breach_date_str = body.get('breachDate', datetime.now().strftime('%Y-%m-%d'))
+    try:
+        breach_dt = datetime.strptime(breach_date_str, '%Y-%m-%d')
+        breach_date = breach_date_str  # Only set if valid
+    except ValueError:
+        return {
+            'statusCode': 400,
+            'headers': {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': allowed_origin
+            },
+            'body': json.dumps({'error': 'Invalid breachDate format. Expected YYYY-MM-DD.'})
+        }
     
     # Authentication
     try:
@@ -126,20 +139,8 @@ def lambda_handler(event, context):
     
     ce = session.client('ce')
     
-    # Parse breach date and calculate analysis period
-    try:
-        breach_dt = datetime.strptime(breach_date, '%Y-%m-%d')
-    except ValueError:
-        return {
-            'statusCode': 400,
-            'headers': {
-                'Content-Type': 'application/json',
-                'Access-Control-Allow-Origin': allowed_origin
-            },
-            'body': json.dumps({'error': 'Invalid breachDate format. Expected YYYY-MM-DD.'})
-        }
-    
     # Analyze the last ANALYSIS_DAYS days leading up to and including breach date
+    # (breach_dt was already parsed and validated earlier)
     analysis_start = (breach_dt - timedelta(days=ANALYSIS_DAYS - 1)).strftime('%Y-%m-%d')
     analysis_end = (breach_dt + timedelta(days=1)).strftime('%Y-%m-%d')  # End is exclusive
     
