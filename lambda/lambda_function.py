@@ -27,6 +27,9 @@ DEFAULT_DAILY_BUDGET = 100.0  # Default daily budget in USD
 CHART_DPI = 150  # DPI for chart images
 ANALYSIS_DAYS = 14  # Number of days to analyze for trends
 
+# Template path - located in the same directory as this script
+TEMPLATE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'template.docx')
+
 
 def lambda_handler(event, context):
     """
@@ -437,7 +440,8 @@ def create_daily_breach_document(daily_costs, daily_service_costs, daily_regiona
                                   days_over_budget, trend_direction, trend_change_pct,
                                   total_period_cost, charts):
     """Create a professionally formatted Word document for daily budget breach analysis."""
-    doc = Document()
+    # Use the CloudThat letterhead template
+    doc = Document(TEMPLATE_PATH)
     
     # ===== DOCUMENT SETUP =====
     setup_document(doc)
@@ -1278,10 +1282,15 @@ def analyze_daily_service_cost(svc):
 
 
 def setup_document(doc):
-    """Configure document settings, margins, and styles."""
-    # Set page margins
+    """Configure document settings, margins, and styles.
+    
+    Note: When using a template, the top margin is preserved to accommodate
+    the letterhead header. Only bottom, left, and right margins are adjusted.
+    """
+    # Set page margins - preserve top margin from template for letterhead
     for section in doc.sections:
-        section.top_margin = Cm(2.54)
+        # Preserve the template's top margin for letterhead header
+        # section.top_margin is not changed to keep the letterhead spacing
         section.bottom_margin = Cm(2.54)
         section.left_margin = Cm(2.54)
         section.right_margin = Cm(2.54)
