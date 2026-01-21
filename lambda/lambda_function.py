@@ -27,6 +27,9 @@ DEFAULT_DAILY_BUDGET = 100.0  # Default daily budget in USD
 CHART_DPI = 150  # DPI for chart images
 ANALYSIS_DAYS = 14  # Number of days to analyze for trends
 
+# Template path - located in the same directory as this script
+TEMPLATE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'template.docx')
+
 
 def lambda_handler(event, context):
     """
@@ -50,37 +53,94 @@ def lambda_handler(event, context):
             'body': ''
         }
     
-    body = json.loads(event['body'])
+    # Parse and validate request body
+    try:
+        body = json.loads(event.get('body', '{}'))
+    except json.JSONDecodeError:
+        return {
+            'statusCode': 400,
+            'headers': {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': allowed_origin
+            },
+            'body': json.dumps({'error': 'Invalid JSON in request body'})
+        }
+    
     # Daily budget amount (default $100)
-    daily_budget = body.get('dailyBudget', body.get('budgetAmount', DEFAULT_DAILY_BUDGET))
-    breach_date = body.get('breachDate', datetime.now().strftime('%Y-%m-%d'))
+    try:
+        daily_budget = float(body.get('dailyBudget', body.get('budgetAmount', DEFAULT_DAILY_BUDGET)))
+        if daily_budget <= 0:
+            raise ValueError("Budget must be positive")
+    except (TypeError, ValueError):
+        return {
+            'statusCode': 400,
+            'headers': {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': allowed_origin
+            },
+            'body': json.dumps({'error': 'Invalid dailyBudget. Must be a positive number.'})
+        }
+    
+    # Parse and validate breach_date before authentication to fail fast
+    breach_date_str = body.get('breachDate', datetime.now().strftime('%Y-%m-%d'))
+    try:
+        breach_dt = datetime.strptime(breach_date_str, '%Y-%m-%d')
+        breach_date = breach_date_str  # Only set if valid
+    except ValueError:
+        return {
+            'statusCode': 400,
+            'headers': {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': allowed_origin
+            },
+            'body': json.dumps({'error': 'Invalid breachDate format. Expected YYYY-MM-DD.'})
+        }
     
     # Authentication
-    if 'roleArn' in body:
-        sts = boto3.client('sts')
-        assumed_role = sts.assume_role(
-            RoleArn=body['roleArn'],
-            RoleSessionName='ExamOnlineBudgetAnalysis'
-        )
-        session = boto3.Session(
-            aws_access_key_id=assumed_role['Credentials']['AccessKeyId'],
-            aws_secret_access_key=assumed_role['Credentials']['SecretAccessKey'],
-            aws_session_token=assumed_role['Credentials']['SessionToken'],
-            region_name='us-east-1'
-        )
-    else:
-        session = boto3.Session(
-            aws_access_key_id=body['accessKeyId'],
-            aws_secret_access_key=body['secretAccessKey'],
-            region_name=body.get('region', 'us-east-1')
-        )
+    try:
+        if 'roleArn' in body:
+            sts = boto3.client('sts')
+            assumed_role = sts.assume_role(
+                RoleArn=body['roleArn'],
+                RoleSessionName='ExamOnlineBudgetAnalysis'
+            )
+            session = boto3.Session(
+                aws_access_key_id=assumed_role['Credentials']['AccessKeyId'],
+                aws_secret_access_key=assumed_role['Credentials']['SecretAccessKey'],
+                aws_session_token=assumed_role['Credentials']['SessionToken'],
+                region_name='us-east-1'
+            )
+        else:
+            # Validate required credentials are present
+            if 'accessKeyId' not in body or 'secretAccessKey' not in body:
+                return {
+                    'statusCode': 400,
+                    'headers': {
+                        'Content-Type': 'application/json',
+                        'Access-Control-Allow-Origin': allowed_origin
+                    },
+                    'body': json.dumps({'error': 'Missing required credentials. Provide either roleArn or both accessKeyId and secretAccessKey.'})
+                }
+            session = boto3.Session(
+                aws_access_key_id=body['accessKeyId'],
+                aws_secret_access_key=body['secretAccessKey'],
+                region_name=body.get('region', 'us-east-1')
+            )
+    except Exception as e:
+        print(f'Authentication error: {str(e)}')
+        return {
+            'statusCode': 401,
+            'headers': {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': allowed_origin
+            },
+            'body': json.dumps({'error': 'Authentication failed. Please check your credentials or role ARN.'})
+        }
     
     ce = session.client('ce')
     
-    # Parse breach date and calculate analysis period
-    breach_dt = datetime.strptime(breach_date, '%Y-%m-%d')
-    
     # Analyze the last ANALYSIS_DAYS days leading up to and including breach date
+    # (breach_dt was already parsed and validated earlier)
     analysis_start = (breach_dt - timedelta(days=ANALYSIS_DAYS - 1)).strftime('%Y-%m-%d')
     analysis_end = (breach_dt + timedelta(days=1)).strftime('%Y-%m-%d')  # End is exclusive
     
@@ -151,7 +211,6 @@ def lambda_handler(event, context):
                 'Access-Control-Allow-Origin': allowed_origin
             },
             'body': json.dumps({'error': 'Failed to fetch cost data. Please check your credentials and ensure Cost Explorer is enabled.'})
-        }
         }
     
     # Get detailed service breakdown for breach date
@@ -295,8 +354,14 @@ def generate_charts(daily_costs, daily_service_costs, daily_budget, breach_date)
     if not daily_costs:
         return charts
     
-    # Set style for professional look
-    plt.style.use('seaborn-v0_8-whitegrid')
+    # Set style for professional look (with fallback for different matplotlib versions)
+    try:
+        plt.style.use('seaborn-v0_8-whitegrid')
+    except OSError:
+        try:
+            plt.style.use('seaborn-whitegrid')
+        except OSError:
+            plt.style.use('ggplot')  # Fallback to ggplot style
     
     # Chart 1: Daily Cost Trend with Budget Line
     fig1, ax1 = plt.subplots(figsize=(10, 5))
@@ -437,7 +502,11 @@ def create_daily_breach_document(daily_costs, daily_service_costs, daily_regiona
                                   days_over_budget, trend_direction, trend_change_pct,
                                   total_period_cost, charts):
     """Create a professionally formatted Word document for daily budget breach analysis."""
-    doc = Document()
+    # Use the CloudThat letterhead template if available, otherwise create a blank document
+    if os.path.exists(TEMPLATE_PATH):
+        doc = Document(TEMPLATE_PATH)
+    else:
+        doc = Document()
     
     # ===== DOCUMENT SETUP =====
     setup_document(doc)
@@ -1278,10 +1347,15 @@ def analyze_daily_service_cost(svc):
 
 
 def setup_document(doc):
-    """Configure document settings, margins, and styles."""
-    # Set page margins
+    """Configure document settings, margins, and styles.
+    
+    Note: When using a template, the top margin is preserved to accommodate
+    the letterhead header. Only bottom, left, and right margins are adjusted.
+    """
+    # Set page margins - preserve top margin from template for letterhead
     for section in doc.sections:
-        section.top_margin = Cm(2.54)
+        # Preserve the template's top margin (~3.65 cm) for letterhead header
+        # section.top_margin is not changed to keep the letterhead spacing intact
         section.bottom_margin = Cm(2.54)
         section.left_margin = Cm(2.54)
         section.right_margin = Cm(2.54)
