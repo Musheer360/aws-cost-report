@@ -440,8 +440,11 @@ def create_daily_breach_document(daily_costs, daily_service_costs, daily_regiona
                                   days_over_budget, trend_direction, trend_change_pct,
                                   total_period_cost, charts):
     """Create a professionally formatted Word document for daily budget breach analysis."""
-    # Use the CloudThat letterhead template
-    doc = Document(TEMPLATE_PATH)
+    # Use the CloudThat letterhead template if available, otherwise create a blank document
+    if os.path.exists(TEMPLATE_PATH):
+        doc = Document(TEMPLATE_PATH)
+    else:
+        doc = Document()
     
     # ===== DOCUMENT SETUP =====
     setup_document(doc)
@@ -1289,8 +1292,8 @@ def setup_document(doc):
     """
     # Set page margins - preserve top margin from template for letterhead
     for section in doc.sections:
-        # Preserve the template's top margin for letterhead header
-        # section.top_margin is not changed to keep the letterhead spacing
+        # Preserve the template's top margin (~3.65 cm) for letterhead header
+        # section.top_margin is not changed to keep the letterhead spacing intact
         section.bottom_margin = Cm(2.54)
         section.left_margin = Cm(2.54)
         section.right_margin = Cm(2.54)
