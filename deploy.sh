@@ -1,10 +1,10 @@
 #!/bin/bash
 set -e
 
-echo "=== AWS Cost Report Generator Deployment ==="
+echo "=== ExamOnline Budget Breach Analysis Tool Deployment ==="
 
 # Variables
-STACK_NAME="costreports360"
+STACK_NAME="examonline-budget-analysis"
 REGION="${AWS_REGION:-ap-south-1}"
 
 # Step 1: Deploy CloudFormation stack
@@ -53,7 +53,7 @@ aws lambda update-function-code \
 # Step 4: Update frontend with API endpoint and Account ID
 echo "Updating frontend with API endpoint and Account ID..."
 ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
-LAMBDA_ROLE_NAME="CostReports360LambdaExecutionRole"
+LAMBDA_ROLE_NAME="ExamOnlineBudgetAnalysisLambdaRole"
 
 # Update frontend HTML
 sed -i "s|PLACEHOLDER_API_ENDPOINT|$API_ENDPOINT|g" frontend/index.html
@@ -73,7 +73,7 @@ rm lambda.zip
 
 echo ""
 echo "=== Deployment Complete ==="
-echo "Frontend URL: http://$BUCKET_NAME.s3-website.$REGION.amazonaws.com"
+echo "ExamOnline Budget Breach Analysis Tool URL: http://$BUCKET_NAME.s3-website.$REGION.amazonaws.com"
 echo "API Endpoint: $API_ENDPOINT"
 echo "Your Account ID: $ACCOUNT_ID"
 echo ""

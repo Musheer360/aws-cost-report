@@ -36,3 +36,7 @@ ENV/
 # OS
 .DS_Store
 Thumbs.db
+
+# Local test files
+test_local.py
+lambda/test_local.py

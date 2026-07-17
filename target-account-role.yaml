@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: Read-only role for cost report generation (deploy in target account)
+Description: Read-only role for ExamOnline Budget Breach Analysis (deploy in target account)
 
 Parameters:
   TrustedAccountId:
@@ -7,10 +7,10 @@ Parameters:
     Description: AWS Account ID that will assume this role (Lambda account)
 
 Resources:
-  CostReportReadOnlyRole:
+  ExamOnlineCostAnalysisRole:
     Type: AWS::IAM::Role
     Properties:
-      RoleName: CostReports360ReadOnlyRole
+      RoleName: ExamOnlineCostAnalysisRole
       AssumeRolePolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -35,5 +35,5 @@ Resources:
 
 Outputs:
   RoleArn:
-    Value: !GetAtt CostReportReadOnlyRole.Arn
-    Description: ARN of the read-only role
+    Value: !GetAtt ExamOnlineCostAnalysisRole.Arn
+    Description: ARN of the ExamOnline cost analysis role
